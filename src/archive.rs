@@ -84,8 +84,17 @@ impl Archive {
     }
 
     /// Open an existing archive.
-    pub fn connect(root: PathBuf) -> Self {
-        unimplemented!()
+    pub fn connect<T>(root: T) -> Result<Self, BufkitDataErr>  where T: AsRef<Path>{
+        let data_root = root.as_ref().join(Archive::DATA_DIR);
+        let db_file = root.as_ref().join(Archive::DB_FILE);
+
+        // Create and set up the database
+        let db_conn = Connection::open_with_flags(
+            db_file,
+            OpenFlags::SQLITE_OPEN_READ_WRITE,
+        )?;
+
+        Ok(Archive { data_root, db_conn })
     }
 
     /// Retrieve a list of sites in the archive.
@@ -177,5 +186,13 @@ mod unit {
     fn test_archive_create_new() {
         assert!(create_test_archive().is_ok());
     }
+
+    #[test]
+    fn test_archive_connect() {
+        let TestArchive { tmp, arch} = create_test_archive().expect("Failed to create test archive.");
+        drop(arch);
+
+        assert!(Archive::connect(tmp.path()).is_ok());
+        assert!(Archive::connect("unlikely_directory_in_my_project").is_err());
     }
 }
