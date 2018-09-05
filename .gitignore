@@ -2,7 +2,6 @@
 # Cargo related
 #
 target
-rls
 Cargo.lock
 *.rs.bk
 
