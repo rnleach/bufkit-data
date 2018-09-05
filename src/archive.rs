@@ -158,10 +158,15 @@ mod unit {
     use super::*;
     use tempdir::TempDir;
 
+    // Function to create a new archive to test.
+    fn create_test_archive() -> Result<Archive, BufkitDataErr> {
+        let test_root = TempDir::new("bufkit-data-test-archive")?;
+
+        Archive::create_new(test_root.path())
+    }
+
     #[test]
     fn test_archive_create_new() {
-        let test_root = TempDir::new("bufkit-data-test-archive-create-new").unwrap();
-
-        let arch = Archive::create_new(test_root.path()).unwrap();
+        create_test_archive().unwrap();
     }
 }
