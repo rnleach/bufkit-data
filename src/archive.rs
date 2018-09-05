@@ -1,8 +1,11 @@
 //! An archive of bufkit soundings.
 
+use std::fs::{create_dir, create_dir_all};
+use std::io;
+use std::path::{PathBuf, Path};
+
 use chrono::NaiveDateTime;
-use rusqlite::Connection;
-use std::path::PathBuf;
+use rusqlite::{Connection, OpenFlags};
 
 use errors::BufkitDataErr;
 use models::Model;
@@ -30,14 +33,54 @@ pub struct Inventory {
 
 /// The archive.
 pub struct Archive {
-    root: PathBuf,
-    db: Connection,
+    data_root: PathBuf,  // the directory containing the downloaded files.
+    db_conn: Connection, // An sqlite connection.
 }
 
 impl Archive {
+    const DATA_DIR: &'static str = "data";
+    const DB_FILE: &'static str = "index";
+
     /// Initialize a new archive.
-    pub fn create_new(root: PathBuf) -> Self {
-        unimplemented!()
+    pub fn create_new<T>(root: T) -> Result<Self, BufkitDataErr> where T: AsRef<Path>{
+
+        let data_root = root.as_ref().join(Archive::DATA_DIR);
+        let db_file = root.as_ref().join(Archive::DB_FILE);
+
+        create_dir_all(root.as_ref())?;
+        create_dir(&data_root)?; // The folder to store the sounding files.
+
+        // Create and set up the database
+        let db_conn = Connection::open_with_flags(
+            db_file,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+        )?;
+
+        db_conn.execute(
+            "CREATE TABLE files (
+                site      TEXT NOT NULL,
+                model     TEXT NOT NULL,
+                init_time TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                PRIMARY KEY (site, model, init_time)
+            )",
+            &[],
+        )?;
+
+        db_conn.execute(
+            "CREATE TABLE sites (
+                site        TEXT PRIMARY KEY,
+                latitude    REAL DEFAULT NULL,
+                longitude   REAL DEFAULT NULL,
+                elevation_m REAL DEFAULT NULL,
+                state       TEXT DEFAULT NULL,
+                name        TEXT DEFAULT NULL,
+                comments    TEXT DEFAULT NULL
+            )",
+            &[],
+        )?;
+
+        Ok(Archive { data_root, db_conn })
     }
 
     /// Open an existing archive.
@@ -95,4 +138,30 @@ impl Archive {
     //
 
     // Add climate summary file and climate data cache files.
+}
+
+/// Find the default archive root. This can be passed into the `create` and `connect` methods of
+/// `Archive`.
+pub fn default_root() -> Result<PathBuf, BufkitDataErr> {
+    let default_root = ::std::env::home_dir()
+        .ok_or(io::Error::new(
+            io::ErrorKind::NotFound,
+            "could not find home directory",
+        ))?
+        .join("bufkit");
+
+    Ok(default_root)
+}
+
+#[cfg(test)]
+mod unit {
+    use super::*;
+    use tempdir::TempDir;
+
+    #[test]
+    fn test_archive_create_new() {
+        let test_root = TempDir::new("bufkit-data-test-archive-create-new").unwrap();
+
+        let arch = Archive::create_new(test_root.path()).unwrap();
+    }
 }

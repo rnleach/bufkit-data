@@ -7,13 +7,16 @@ authors = ["Ryan Leach <clumsycodemonkey@gmail.com>"]
 chrono = "0.4.2"
 failure = "0.1.1"
 flate2 = {version = "1.0", features = ["rust_backend"], default-features = false }
-rusqlite = { version = "0.14.0", features = ["bundled"], default-features = false }
+rusqlite = { version = "0.14.0", features = ["bundled", "chrono"], default-features = false }
 serde = "1.0"
 serde_derive = "1.0"
 serde_yaml = "0.8"
 sounding-analysis = "0.8.1"
 sounding-base = "0.7.1"
 sounding-bufkit = "0.8"
+
+[dev-dependencies]
+tempdir = "0.3"
 
 [patch.crates-io]
 sounding-analysis = {git = 'https://github.com/rnleach/sounding-analysis.git', branch = 'dev'}
