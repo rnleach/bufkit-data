@@ -1,0 +1,30 @@
+#
+# Cargo related
+#
+target
+rls
+Cargo.lock
+*.rs.bk
+
+#
+# Sublime Text
+#
+*.sublime-workspace
+*.sublime-project
+
+#
+# VSCode related
+#
+.vscode
+
+#
+# Project related
+#
+*.log
+example_data
+*config.yml
+
+#
+# OS related
+#
+.DS_Store

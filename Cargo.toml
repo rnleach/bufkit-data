@@ -1,0 +1,6 @@
+[package]
+name = "bufkit-data"
+version = "0.1.0"
+authors = ["Ryan <rnleach@users.noreply.github.com>"]
+
+[dependencies]
