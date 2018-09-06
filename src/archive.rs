@@ -197,7 +197,6 @@ impl Archive {
         Ok(())
     }
 
-    /// Load a file from the archive and return its contents in a `String`.
     pub fn get_file(
         &self,
         site_id: &str,
@@ -255,14 +254,20 @@ impl Archive {
         format!("{}_{}_{}.buf.gz", file_string, model.string_name(), site)
     }
 
-    /// Check to see if a file is present in the archive.
+    /// Check to see if a file is present in the archive and it is retrieveable.
     pub fn exists(
         &self,
-        site: &str,
+        site_id: &str,
         model: Model,
         init_time: &NaiveDateTime,
     ) -> Result<bool, BufkitDataErr> {
-        unimplemented!()
+        let num_records: i32 = self.db_conn.query_row(
+            "SELECT COUNT(*) FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
+            &[&site_id.to_uppercase(), &model.string_name(), init_time],
+            |row| row.get_checked(0),
+        )??;
+
+        Ok(num_records == 1)
     }
 
     /// Get an inventory of soundings for a site & model.
@@ -274,7 +279,7 @@ impl Archive {
     // TODO
     //
 
-    // Add climate summary file and climate data cache files.
+    // Add "climate" summary file and "climate" data cache files.
 }
 
 /// Find the default archive root. This can be passed into the `create` and `connect` methods of
@@ -471,5 +476,83 @@ mod unit {
 
         arch.get_most_recent_file("kmso", Model::GFS)
             .expect("Failed to retrieve sounding.");
+    }
+
+    #[test]
+    fn test_exists() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch).expect("Error filling test archive.");
+
+        println!("Checking for files that should exist.");
+        assert!(
+            arch.exists(
+                "kmso",
+                Model::GFS,
+                &NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0)
+            ).expect("Error checking for existence")
+        );
+        assert!(
+            arch.exists(
+                "kmso",
+                Model::GFS,
+                &NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0)
+            ).expect("Error checking for existence")
+        );
+        assert!(
+            arch.exists(
+                "kmso",
+                Model::GFS,
+                &NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0)
+            ).expect("Error checking for existence")
+        );
+        assert!(
+            arch.exists(
+                "kmso",
+                Model::GFS,
+                &NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0)
+            ).expect("Error checking for existence")
+        );
+
+        println!("Checking for files that should NOT exist.");
+        assert!(
+            !arch
+                .exists(
+                    "kmso",
+                    Model::GFS,
+                    &NaiveDate::from_ymd(2018, 4, 1).and_hms(0, 0, 0)
+                )
+                .expect("Error checking for existence")
+        );
+        assert!(
+            !arch
+                .exists(
+                    "kmso",
+                    Model::GFS,
+                    &NaiveDate::from_ymd(2018, 4, 1).and_hms(6, 0, 0)
+                )
+                .expect("Error checking for existence")
+        );
+        assert!(
+            !arch
+                .exists(
+                    "kmso",
+                    Model::GFS,
+                    &NaiveDate::from_ymd(2018, 4, 1).and_hms(12, 0, 0)
+                )
+                .expect("Error checking for existence")
+        );
+        assert!(
+            !arch
+                .exists(
+                    "kmso",
+                    Model::GFS,
+                    &NaiveDate::from_ymd(2018, 4, 1).and_hms(18, 0, 0)
+                )
+                .expect("Error checking for existence")
+        );
     }
 }
