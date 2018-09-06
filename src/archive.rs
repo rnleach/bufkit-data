@@ -197,6 +197,7 @@ impl Archive {
         Ok(())
     }
 
+    /// Retrieve a file from the archive.
     pub fn get_file(
         &self,
         site_id: &str,

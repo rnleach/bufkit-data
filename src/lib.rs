@@ -1,4 +1,4 @@
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 //! Package to manage and interface with an archive of bufkit files.
 
 //
