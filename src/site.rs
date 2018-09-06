@@ -1,8 +1,19 @@
 // State abreviations
 pub const STATES: &[&str] = &[
-    "WA", "ID", "MT", "OR", "CA", "NV", "UT", "NM", "AZ", "CO", "WY", "NB", "TX", "IL", "IN", "OH",
-    "OK", "SD", "ND", "KS", "MS", "AL", "LA", "GA", "FL", "SC", "NC", "VT", "NH", "MN", "WI", "MI",
-    "NY", "CT", "RI", "DE", "MD", "VA", "WV", "AK", "HI", "IA", "MA", "ME", "PA", "KY", "TN", "MO",
+    // US States
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL",
+    "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH",
+    "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT",
+    "VA", "WA", "WV", "WI", "WY",
+    // US Commonwealth and Territories
+    "AS", // American Samoa
+    "DC", // District of Columbia
+    "FM", // Federated States of Micronesia
+    "MH", // Marshall Islands
+    "MP", // Northern Mariana Islands
+    "PW", // Palau
+    "PR", // Puerto Rico
+    "VI", // Virgin Islands
 ];
 
 /// Description of a site with a sounding
