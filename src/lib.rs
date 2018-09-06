@@ -4,9 +4,10 @@
 //
 // Public API
 //
-pub use archive::{default_root, Archive, Inventory, Site};
+pub use archive::{default_root, Archive, Inventory};
 pub use errors::BufkitDataErr;
 pub use models::Model;
+pub use site::Site;
 
 //
 // Implementation only
@@ -26,6 +27,7 @@ extern crate sounding_bufkit;
 mod archive;
 mod errors;
 mod models;
+mod site;
 
 #[cfg(test)]
 extern crate tempdir;
