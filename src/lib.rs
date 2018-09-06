@@ -15,6 +15,7 @@ pub use site::Site;
 extern crate chrono;
 #[macro_use]
 extern crate failure;
+extern crate flate2;
 extern crate rusqlite;
 extern crate serde;
 #[macro_use]

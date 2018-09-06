@@ -1,11 +1,13 @@
 //! An archive of bufkit soundings.
 
-use std::fs::{create_dir, create_dir_all};
-use std::io;
+use std::fs::{create_dir, create_dir_all, File};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 use chrono::NaiveDateTime;
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{Connection, OpenFlags};
+use sounding_bufkit::BufkitData;
 
 use errors::BufkitDataErr;
 use models::Model;
@@ -120,7 +122,7 @@ impl Archive {
             "INSERT INTO sites (site, latitude, longitude, elevation_m, state, name, notes)
                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             &[
-                &site.id,
+                &site.id.to_uppercase(),
                 &site.lat,
                 &site.lon,
                 &site.elev_m,
@@ -133,24 +135,108 @@ impl Archive {
         Ok(())
     }
 
+    /// Check if a site already exists
+    pub fn site_exists(&self, site_id: &str) -> Result<bool, BufkitDataErr> {
+        let number: i32 = self.db_conn.query_row(
+            "SELECT COUNT(*) FROM sites WHERE site = ?1",
+            &[&site_id.to_uppercase()],
+            |row| row.get(0),
+        )?;
+
+        Ok(number == 1)
+    }
+
     /// Add a bufkit file to the archive.
     pub fn add_file(
         &mut self,
         site_id: &str,
         model: Model,
         init_time: &NaiveDateTime,
+        text_data: &str,
     ) -> Result<(), BufkitDataErr> {
-        unimplemented!()
+        if !self.site_exists(site_id)? {
+            let anal = BufkitData::new(text_data)?
+                .into_iter()
+                .nth(0)
+                .ok_or(BufkitDataErr::NotEnoughData)?;
+            let snd = anal.sounding();
+            let (lat, lon) = match snd.get_station_info().location() {
+                Some((lat, lon)) => (Some(lat), Some(lon)),
+                None => (None, None),
+            };
+
+            let elev_m = snd.get_station_info().elevation().into_option();
+
+            self.add_site(&Site {
+                id: site_id.to_owned(),
+                name: None,
+                lat,
+                lon,
+                elev_m,
+                notes: None,
+                state: None,
+            })?;
+        }
+
+        let file_name = self.build_file_name(site_id, model, init_time);
+        let file = File::create(self.data_root.join(&file_name))?;
+        let mut encoder = GzEncoder::new(file, Compression::default());
+        encoder.write_all(text_data.as_bytes())?;
+
+        self.db_conn.execute(
+            "INSERT OR REPLACE INTO files (site, model, init_time, file_name)
+                  VALUES (?1, ?2, ?3, ?4)",
+            &[
+                &site_id.to_uppercase(),
+                &model.string_name(),
+                init_time,
+                &file_name,
+            ],
+        )?;
+
+        Ok(())
     }
 
     /// Load a file from the archive and return its contents in a `String`.
     pub fn get_file(
         &self,
-        site: &str,
+        site_id: &str,
         model: Model,
         init_time: &NaiveDateTime,
     ) -> Result<String, BufkitDataErr> {
+        let file_name: String = self.db_conn.query_row(
+            "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
+            &[&site_id.to_uppercase(), &model.string_name(), init_time],
+            |row| row.get_checked(0),
+        )??;
+
+        let file = File::open(self.data_root.join(file_name))?;
+        let mut decoder = GzDecoder::new(file);
+        let mut s = String::new();
+        decoder.read_to_string(&mut s)?;
+        Ok(s)
+    }
+
+    /// Retrieve the  most recent file
+    pub fn get_most_recent_file(
+        &self,
+        site_id: &str,
+        model: Model,
+    ) -> Result<String, BufkitDataErr> {
         unimplemented!()
+    }
+
+    fn build_file_name(&self, site_id: &str, model: Model, init_time: &NaiveDateTime) -> String {
+        let file_string = init_time.format("%Y%m%d%HZ").to_string();
+
+        // Correct for misnomers.
+        let site = if model == Model::GFS && site_id == "kfca" {
+            &"kgpi"
+        } else {
+            site_id
+        };
+
+        format!("{}_{}_{}.buf.gz", file_string, model.string_name(), site)
     }
 
     /// Check to see if a file is present in the archive.
@@ -194,7 +280,12 @@ pub fn default_root() -> Result<PathBuf, BufkitDataErr> {
 #[cfg(test)]
 mod unit {
     use super::*;
+
+    use std::fs::read_dir;
+
     use tempdir::TempDir;
+
+    use sounding_bufkit::BufkitFile;
 
     // struct to hold temporary data for tests.
     struct TestArchive {
@@ -234,7 +325,7 @@ mod unit {
 
         let test_sites = &[
             Site {
-                id: "kord".to_owned(),
+                id: "kord".to_uppercase(),
                 name: Some("Chicago/O'Hare".to_owned()),
                 lat: None,
                 lon: None,
@@ -243,7 +334,7 @@ mod unit {
                 state: Some("IL"),
             },
             Site {
-                id: "ksea".to_owned(),
+                id: "ksea".to_uppercase(),
                 name: Some("Seattle".to_owned()),
                 lat: None,
                 lon: None,
@@ -257,10 +348,71 @@ mod unit {
             arch.add_site(site).expect("Error adding site.");
         }
 
+        assert!(arch.site_exists("ksea").expect("Error checking existence"));
+        assert!(arch.site_exists("kord").expect("Error checking existence"));
+        assert!(!arch.site_exists("xyz").expect("Error checking existence"));
+
         let retrieved_sites = arch.get_sites().expect("Error retrieving sites.");
 
         for site in retrieved_sites {
+            println!("{:#?}", site);
             assert!(test_sites.iter().find(|st| **st == site).is_some());
+        }
+    }
+
+    #[test]
+    fn test_files_round_trip() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        let path = PathBuf::new().join("example_data");
+
+        let files = read_dir(path)
+            .expect("Error reading directory")
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| {
+                entry.file_type().ok().and_then(|ft| {
+                    if ft.is_file() {
+                        Some(entry.path())
+                    } else {
+                        None
+                    }
+                })
+            });
+
+        for path in files {
+            let bufkit_file = BufkitFile::load(&path).expect("Error loading file.");
+            let anal = bufkit_file
+                .data()
+                .expect("Can't get data.")
+                .into_iter()
+                .nth(0)
+                .expect("No data in file?");
+            let snd = anal.sounding();
+
+            let model = if path.to_string_lossy().to_string().contains("gfs") {
+                Model::GFS
+            } else {
+                Model::NAM
+            };
+            let site = if path.to_string_lossy().to_string().contains("kmso") {
+                "kmso"
+            } else {
+                panic!("Unprepared for this test data!");
+            };
+
+            let init_time = snd.get_valid_time().expect("NO VALID TIME?!");
+            let raw_string = bufkit_file.raw_text();
+
+            arch.add_file(site, model, &init_time, raw_string)
+                .expect("Failure to add.");
+            let recovered_str = arch
+                .get_file(site, model, &init_time)
+                .expect("Failure to load.");
+
+            assert!(raw_string == recovered_str);
         }
     }
 }
