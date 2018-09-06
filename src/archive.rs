@@ -217,13 +217,29 @@ impl Archive {
         Ok(s)
     }
 
+    /// Retrieve the model initialization time of the most recent model in the archive.
+    pub fn get_most_recent_valid_time(
+        &self,
+        site_id: &str,
+        model: Model,
+    ) -> Result<NaiveDateTime, BufkitDataErr> {
+        let init_time: NaiveDateTime = self.db_conn.query_row(
+            "SELECT init_time FROM files WHERE site = ?1 AND model = ?2",
+            &[&site_id.to_uppercase(), &model.string_name()],
+            |row| row.get_checked(0),
+        )??;
+
+        Ok(init_time)
+    }
+
     /// Retrieve the  most recent file
     pub fn get_most_recent_file(
         &self,
         site_id: &str,
         model: Model,
     ) -> Result<String, BufkitDataErr> {
-        unimplemented!()
+        let init_time = self.get_most_recent_valid_time(site_id, model)?;
+        self.get_file(site_id, model, &init_time)
     }
 
     fn build_file_name(&self, site_id: &str, model: Model, init_time: &NaiveDateTime) -> String {
@@ -283,6 +299,7 @@ mod unit {
 
     use std::fs::read_dir;
 
+    use chrono::NaiveDate;
     use tempdir::TempDir;
 
     use sounding_bufkit::BufkitFile;
@@ -299,6 +316,63 @@ mod unit {
         let arch = Archive::create_new(tmp.path())?;
 
         Ok(TestArchive { tmp, arch })
+    }
+
+    // Function to fetch a list of test files.
+    fn get_test_data() -> Result<Vec<(String, Model, NaiveDateTime, String)>, BufkitDataErr> {
+        let path = PathBuf::new().join("example_data");
+
+        let files = read_dir(path)?
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| {
+                entry.file_type().ok().and_then(|ft| {
+                    if ft.is_file() {
+                        Some(entry.path())
+                    } else {
+                        None
+                    }
+                })
+            });
+
+        let mut to_return = vec![];
+
+        for path in files {
+            let bufkit_file = BufkitFile::load(&path)?;
+            let anal = bufkit_file
+                .data()?
+                .into_iter()
+                .nth(0)
+                .ok_or(BufkitDataErr::NotEnoughData)?;
+            let snd = anal.sounding();
+
+            let model = if path.to_string_lossy().to_string().contains("gfs") {
+                Model::GFS
+            } else {
+                Model::NAM
+            };
+            let site = if path.to_string_lossy().to_string().contains("kmso") {
+                "kmso"
+            } else {
+                panic!("Unprepared for this test data!");
+            };
+
+            let init_time = snd.get_valid_time().expect("NO VALID TIME?!");
+            let raw_string = bufkit_file.raw_text();
+
+            to_return.push((site.to_owned(), model, init_time, raw_string.to_owned()))
+        }
+
+        Ok(to_return)
+    }
+
+    // Function to fill the archive with some example data.
+    fn fill_test_archive(arch: &mut Archive) -> Result<(), BufkitDataErr> {
+        let test_data = get_test_data().expect("Error loading test data.");
+
+        for (site, model, init_time, raw_data) in test_data {
+            arch.add_file(&site, model, &init_time, &raw_data)?;
+        }
+        Ok(())
     }
 
     #[test]
@@ -367,52 +441,35 @@ mod unit {
             mut arch,
         } = create_test_archive().expect("Failed to create test archive.");
 
-        let path = PathBuf::new().join("example_data");
+        let test_data = get_test_data().expect("Error loading test data.");
 
-        let files = read_dir(path)
-            .expect("Error reading directory")
-            .filter_map(|entry| entry.ok())
-            .filter_map(|entry| {
-                entry.file_type().ok().and_then(|ft| {
-                    if ft.is_file() {
-                        Some(entry.path())
-                    } else {
-                        None
-                    }
-                })
-            });
-
-        for path in files {
-            let bufkit_file = BufkitFile::load(&path).expect("Error loading file.");
-            let anal = bufkit_file
-                .data()
-                .expect("Can't get data.")
-                .into_iter()
-                .nth(0)
-                .expect("No data in file?");
-            let snd = anal.sounding();
-
-            let model = if path.to_string_lossy().to_string().contains("gfs") {
-                Model::GFS
-            } else {
-                Model::NAM
-            };
-            let site = if path.to_string_lossy().to_string().contains("kmso") {
-                "kmso"
-            } else {
-                panic!("Unprepared for this test data!");
-            };
-
-            let init_time = snd.get_valid_time().expect("NO VALID TIME?!");
-            let raw_string = bufkit_file.raw_text();
-
-            arch.add_file(site, model, &init_time, raw_string)
+        for (site, model, init_time, raw_data) in test_data {
+            arch.add_file(&site, model, &init_time, &raw_data)
                 .expect("Failure to add.");
             let recovered_str = arch
-                .get_file(site, model, &init_time)
+                .get_file(&site, model, &init_time)
                 .expect("Failure to load.");
 
-            assert!(raw_string == recovered_str);
+            assert!(raw_data == recovered_str);
         }
+    }
+
+    #[test]
+    fn test_get_most_recent_file() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch).expect("Error filling test archive.");
+
+        let init_time = arch
+            .get_most_recent_valid_time("kmso", Model::GFS)
+            .expect("Error getting valid time.");
+
+        assert_eq!(init_time, NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0));
+
+        arch.get_most_recent_file("kmso", Model::GFS)
+            .expect("Failed to retrieve sounding.");
     }
 }
