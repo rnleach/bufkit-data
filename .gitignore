@@ -19,9 +19,6 @@ Cargo.lock
 #
 # Project related
 #
-*.log
-example_data
-*config.yml
 
 #
 # OS related
