@@ -110,7 +110,7 @@ impl Archive {
                     .find(|&&st| st == row.get::<_, String>(2))
                     .map(|st| *st),
             })?
-            .map(|res| res.map_err(|err| BufkitDataErr::Database(err)))
+            .map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
 
         vals
@@ -286,8 +286,8 @@ impl Archive {
 /// Find the default archive root. This can be passed into the `create` and `connect` methods of
 /// `Archive`.
 pub fn default_root() -> Result<PathBuf, BufkitDataErr> {
-    let default_root = ::std::env::home_dir()
-        .ok_or(io::Error::new(
+    let default_root = ::dirs::home_dir()
+        .ok_or_else(|| io::Error::new(
             io::ErrorKind::NotFound,
             "could not find home directory",
         ))?

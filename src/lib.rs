@@ -13,6 +13,7 @@ pub use site::Site;
 // Implementation only
 //
 extern crate chrono;
+extern crate dirs;
 #[macro_use]
 extern crate failure;
 extern crate flate2;

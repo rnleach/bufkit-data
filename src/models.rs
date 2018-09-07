@@ -26,8 +26,8 @@ impl fmt::Display for Model {
 
 impl Model {
     /// Get the string representation of the model.
-    pub fn string_name(&self) -> &'static str {
-        match *self {
+    pub fn string_name(self) -> &'static str {
+        match self {
             Model::GFS => "gfs",
             Model::NAM => "nam",
             Model::NAM4KM => "nam4km",
