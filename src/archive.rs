@@ -3,15 +3,17 @@
 use std::fs::{create_dir, create_dir_all, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use chrono::NaiveDateTime;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{Connection, OpenFlags};
 use sounding_bufkit::BufkitData;
+use strum::AsStaticRef;
 
 use errors::BufkitDataErr;
 use models::Model;
-use site::{Site, STATES};
+use site::{Site, StateProv};
 
 /// Inventory lists first & last initialization times of the models in the database for a site &
 /// model. It also contains a list of model initialization times that are missing between the first
@@ -105,10 +107,7 @@ impl Archive {
                 lon: row.get(5),
                 elev_m: row.get(6),
                 notes: row.get(3),
-                state: STATES
-                    .iter()
-                    .find(|&&st| st == row.get::<_, String>(2))
-                    .map(|st| *st),
+                state: StateProv::from_str(&row.get::<_, String>(2)).ok(),
             })?
             .map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
@@ -126,7 +125,7 @@ impl Archive {
                 &site.lat,
                 &site.lon,
                 &site.elev_m,
-                &site.state,
+                &site.state.map(|state_prov| state_prov.as_static()),
                 &site.name,
                 &site.notes,
             ],
@@ -287,10 +286,7 @@ impl Archive {
 /// `Archive`.
 pub fn default_root() -> Result<PathBuf, BufkitDataErr> {
     let default_root = ::dirs::home_dir()
-        .ok_or_else(|| io::Error::new(
-            io::ErrorKind::NotFound,
-            "could not find home directory",
-        ))?
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not find home directory"))?
         .join("bufkit");
 
     Ok(default_root)
@@ -411,7 +407,7 @@ mod unit {
                 lon: None,
                 elev_m: None,
                 notes: Some("Major air travel hub.".to_owned()),
-                state: Some("IL"),
+                state: Some(StateProv::IL),
             },
             Site {
                 id: "ksea".to_uppercase(),
@@ -420,7 +416,7 @@ mod unit {
                 lon: None,
                 elev_m: None,
                 notes: Some("A coastal city with coffe and rain".to_owned()),
-                state: Some("WA"),
+                state: Some(StateProv::WA),
             },
         ];
 

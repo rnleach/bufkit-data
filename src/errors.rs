@@ -3,6 +3,8 @@ use failure;
 use sounding_analysis::AnalysisError;
 use sounding_bufkit::BufkitFileError;
 
+use strum::ParseError;
+
 /// Error from the archive interface.
 #[derive(Debug, Fail)]
 pub enum BufkitDataErr {
@@ -71,5 +73,11 @@ impl From<::std::io::Error> for BufkitDataErr {
 impl From<::rusqlite::Error> for BufkitDataErr {
     fn from(err: ::rusqlite::Error) -> BufkitDataErr {
         BufkitDataErr::Database(err)
+    }
+}
+
+impl From<ParseError> for BufkitDataErr {
+    fn from(_err: ParseError) -> BufkitDataErr {
+        BufkitDataErr::GeneralError
     }
 }

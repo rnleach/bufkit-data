@@ -25,6 +25,9 @@ extern crate serde_yaml;
 extern crate sounding_analysis;
 extern crate sounding_base;
 extern crate sounding_bufkit;
+extern crate strum;
+#[macro_use]
+extern crate strum_macros;
 
 mod archive;
 mod errors;
