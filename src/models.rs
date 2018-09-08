@@ -45,4 +45,13 @@ impl Model {
             _ => Err(BufkitDataErr::InvalidModelName(test_str.to_owned())),
         }
     }
+
+    /// Get the number of hours between runs.
+    pub fn hours_between_runs(self) -> i64 {
+        match self {
+            Model::GFS => 6,
+            Model::NAM => 6,
+            Model::NAM4KM => 6,
+        }
+    }
 }

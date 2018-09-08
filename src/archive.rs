@@ -12,18 +12,9 @@ use sounding_bufkit::BufkitData;
 use strum::AsStaticRef;
 
 use errors::BufkitDataErr;
+use inventory::Inventory;
 use models::Model;
 use site::{Site, StateProv};
-
-/// Inventory lists first & last initialization times of the models in the database for a site &
-/// model. It also contains a list of model initialization times that are missing between the first
-/// and last.
-#[allow(missing_docs)]
-pub struct Inventory {
-    pub first: NaiveDateTime,
-    pub last: NaiveDateTime,
-    pub missing: Vec<NaiveDateTime>,
-}
 
 /// The archive.
 pub struct Archive {
@@ -277,14 +268,26 @@ impl Archive {
 
     /// Get an inventory of soundings for a site & model.
     pub fn get_inventory(&self, site_id: &str, model: Model) -> Result<Inventory, BufkitDataErr> {
-        unimplemented!()
+        let mut stmt = self.db_conn.prepare(
+            "
+                SELECT init_time FROM files 
+                WHERE site = ?1 AND model = ?2
+                ORDER BY init_time ASC
+            ",
+        )?;
+
+        let init_times: Result<Vec<Result<NaiveDateTime, _>>, BufkitDataErr> = stmt
+            .query_map(&[&site_id.to_uppercase(), &model.string_name()], |row| {
+                row.get_checked(0)
+            })?
+            .map(|res| res.map_err(BufkitDataErr::Database))
+            .collect();
+
+        let init_times: Vec<NaiveDateTime> =
+            init_times?.into_iter().filter_map(|res| res.ok()).collect();
+
+        Inventory::new(init_times, model)
     }
-
-    //
-    // TODO
-    //
-
-    // Add "climate" summary file and "climate" data cache files.
 }
 
 /// Find the default archive root. This can be passed into the `create` and `connect` methods of
@@ -556,5 +559,26 @@ mod unit {
                 )
                 .expect("Error checking for existence")
         );
+    }
+
+    #[test]
+    fn test_inventory() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch).expect("Error filling test archive.");
+
+        let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
+        let missing = vec![NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0)];
+
+        let expected = Inventory {
+            first,
+            last,
+            missing,
+        };
+        assert_eq!(arch.get_inventory("kmso", Model::NAM).unwrap(), expected);
     }
 }

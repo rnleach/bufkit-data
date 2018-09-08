@@ -4,8 +4,9 @@
 //
 // Public API
 //
-pub use archive::{default_root, Archive, Inventory};
+pub use archive::{default_root, Archive};
 pub use errors::BufkitDataErr;
+pub use inventory::Inventory;
 pub use models::Model;
 pub use site::Site;
 
@@ -31,6 +32,7 @@ extern crate strum_macros;
 
 mod archive;
 mod errors;
+mod inventory;
 mod models;
 mod site;
 
