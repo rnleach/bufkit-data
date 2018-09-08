@@ -223,7 +223,12 @@ impl Archive {
         model: Model,
     ) -> Result<NaiveDateTime, BufkitDataErr> {
         let init_time: NaiveDateTime = self.db_conn.query_row(
-            "SELECT init_time FROM files WHERE site = ?1 AND model = ?2",
+            "
+                SELECT init_time FROM files 
+                WHERE site = ?1 AND model = ?2
+                ORDER BY init_time DESC
+                LIMIT 1
+            ",
             &[&site_id.to_uppercase(), &model.string_name()],
             |row| row.get_checked(0),
         )??;
@@ -469,7 +474,7 @@ mod unit {
             .get_most_recent_valid_time("kmso", Model::GFS)
             .expect("Error getting valid time.");
 
-        assert_eq!(init_time, NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0));
+        assert_eq!(init_time, NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0));
 
         arch.get_most_recent_file("kmso", Model::GFS)
             .expect("Failed to retrieve sounding.");
