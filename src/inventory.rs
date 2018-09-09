@@ -32,11 +32,11 @@ impl Inventory {
         let mut next_init_time = first;
 
         for init_time in init_times {
-            next_init_time = next_init_time + delta_hours;
+            next_init_time += delta_hours;
 
             while next_init_time < init_time {
                 missing.push(next_init_time);
-                next_init_time = next_init_time + delta_hours;
+                next_init_time += delta_hours;
             }
         }
 
