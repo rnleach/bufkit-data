@@ -1,0 +1,11 @@
+language: rust
+cache: cargo
+
+rust:
+  - stable
+  - beta
+  - nightly
+
+script:
+  - cargo test --verbose
+  - if [ "$TRAVIS_BRANCH" == "master" ]; then echo "Working on master branch" && cargo package --verbose; fi
