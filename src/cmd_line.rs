@@ -77,7 +77,10 @@ impl<'a, 'b> CommonCmdLineArgs {
 
     /// Process an `App` to get the parsed values out of it and the matches object so an application
     /// can continue with further argument parsing.
-    pub fn matches(app: App<'a, 'b>, allow_empty_lists: bool) -> Result<(Self, ArgMatches<'a>), BufkitDataErr> {
+    pub fn matches(
+        app: App<'a, 'b>,
+        allow_empty_lists: bool,
+    ) -> Result<(Self, ArgMatches<'a>), BufkitDataErr> {
         let matches = app.get_matches();
 
         let cmd_line_opts = {
@@ -105,8 +108,7 @@ impl<'a, 'b> CommonCmdLineArgs {
                 .and_then(|val| val.parse::<i64>().ok())
                 .expect("Invalid days-back, not parseable as an integer.");
 
-            if !allow_empty_lists && sites.is_empty()
-            {
+            if !allow_empty_lists && sites.is_empty() {
                 let arch = Archive::connect(&root)?;
                 sites = arch.get_sites()?.into_iter().map(|site| site.id).collect();
             }
@@ -114,7 +116,7 @@ impl<'a, 'b> CommonCmdLineArgs {
             if !allow_empty_lists && models.is_empty() {
                 models = Model::iter().collect();
             }
-                
+
             CommonCmdLineArgs {
                 sites,
                 models,
