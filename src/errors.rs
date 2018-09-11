@@ -12,24 +12,24 @@ pub enum BufkitDataErr {
     // Inherited errors from sounding stack
     //
     /// Error forwarded from sounding-analysis
-    #[fail(display = "Error from sounding-analysis: {}", _0)]
+    #[fail(display = "Error from sounding-analysis.")]
     SoundingAnalysis(#[cause] AnalysisError),
     /// Error forwarded from sounding-bufkit
-    #[fail(display = "Error from sounding-bufkit: {}", _0)]
+    #[fail(display = "Error from sounding-bufkit.")]
     SoundingBufkit(#[cause] BufkitFileError),
 
     //
     // Inherited errors from std
     //
     /// Error forwarded from std
-    #[fail(display = "std io error {}", _0)]
+    #[fail(display = "std io error.")]
     IO(#[cause] ::std::io::Error),
 
     //
     // Other forwarded errors
     //
     /// Database error
-    #[fail(display = "Error with sqlite database: {}.", _0)]
+    #[fail(display = "Error with sqlite database.")]
     Database(#[cause] ::rusqlite::Error),
     /// A general error forwarded with the failure crate
     #[fail(display = "General error forwarded.")]
