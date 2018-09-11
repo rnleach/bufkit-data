@@ -5,7 +5,9 @@ use std::str::FromStr;
 
 use clap::{App, Arg, ArgMatches};
 use dirs::home_dir;
+use strum::IntoEnumIterator;
 
+use archive::Archive;
 use errors::BufkitDataErr;
 use models::Model;
 
@@ -75,17 +77,17 @@ impl<'a, 'b> CommonCmdLineArgs {
 
     /// Process an `App` to get the parsed values out of it and the matches object so an application
     /// can continue with further argument parsing.
-    pub fn matches(app: App<'a, 'b>) -> Result<(Self, ArgMatches<'a>), BufkitDataErr> {
+    pub fn matches(app: App<'a, 'b>, allow_empty_lists: bool) -> Result<(Self, ArgMatches<'a>), BufkitDataErr> {
         let matches = app.get_matches();
 
         let cmd_line_opts = {
-            let sites: Vec<String> = matches
+            let mut sites: Vec<String> = matches
                 .values_of("sites")
                 .into_iter()
                 .flat_map(|site_iter| site_iter.map(|arg_val| arg_val.to_owned()))
                 .collect();
 
-            let models: Vec<Model> = matches
+            let mut models: Vec<Model> = matches
                 .values_of("models")
                 .into_iter()
                 .flat_map(|model_iter| model_iter.map(Model::from_str))
@@ -103,6 +105,16 @@ impl<'a, 'b> CommonCmdLineArgs {
                 .and_then(|val| val.parse::<i64>().ok())
                 .expect("Invalid days-back, not parseable as an integer.");
 
+            if !allow_empty_lists && sites.is_empty()
+            {
+                let arch = Archive::connect(&root)?;
+                sites = arch.get_sites()?.into_iter().map(|site| site.id).collect();
+            }
+
+            if !allow_empty_lists && models.is_empty() {
+                models = Model::iter().collect();
+            }
+                
             CommonCmdLineArgs {
                 sites,
                 models,

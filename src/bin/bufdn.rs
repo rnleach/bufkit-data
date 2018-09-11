@@ -32,7 +32,7 @@ fn main() {
 fn run() -> Result<(), Error> {
     let app = CommonCmdLineArgs::new_app("bufdn", "Download data into your archive.");
 
-    let (common_args, _matches) = CommonCmdLineArgs::matches(app)?;
+    let (common_args, _matches) = CommonCmdLineArgs::matches(app, false)?;
 
     // open the archive
     // build a list of soundings to download (site_id, model, init_time)
