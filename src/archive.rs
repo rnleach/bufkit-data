@@ -1,7 +1,7 @@
 //! An archive of bufkit soundings.
 
 use std::fs::{create_dir, create_dir_all, File};
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -178,7 +178,7 @@ impl Archive {
                   VALUES (?1, ?2, ?3, ?4)",
             &[
                 &site_id.to_uppercase(),
-                &model.string_name(),
+                &model.as_static(),
                 init_time,
                 &file_name,
             ],
@@ -196,7 +196,7 @@ impl Archive {
     ) -> Result<String, BufkitDataErr> {
         let file_name: String = self.db_conn.query_row(
             "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[&site_id.to_uppercase(), &model.string_name(), init_time],
+            &[&site_id.to_uppercase(), &model.as_static(), init_time],
             |row| row.get_checked(0),
         )??;
 
@@ -220,7 +220,7 @@ impl Archive {
                 ORDER BY init_time DESC
                 LIMIT 1
             ",
-            &[&site_id.to_uppercase(), &model.string_name()],
+            &[&site_id.to_uppercase(), &model.as_static()],
             |row| row.get_checked(0),
         )??;
 
@@ -247,7 +247,7 @@ impl Archive {
             site_id
         };
 
-        format!("{}_{}_{}.buf.gz", file_string, model.string_name(), site)
+        format!("{}_{}_{}.buf.gz", file_string, model.as_static(), site)
     }
 
     /// Check to see if a file is present in the archive and it is retrieveable.
@@ -259,7 +259,7 @@ impl Archive {
     ) -> Result<bool, BufkitDataErr> {
         let num_records: i32 = self.db_conn.query_row(
             "SELECT COUNT(*) FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[&site_id.to_uppercase(), &model.string_name(), init_time],
+            &[&site_id.to_uppercase(), &model.as_static(), init_time],
             |row| row.get_checked(0),
         )??;
 
@@ -277,7 +277,7 @@ impl Archive {
         )?;
 
         let init_times: Result<Vec<Result<NaiveDateTime, _>>, BufkitDataErr> = stmt
-            .query_map(&[&site_id.to_uppercase(), &model.string_name()], |row| {
+            .query_map(&[&site_id.to_uppercase(), &model.as_static()], |row| {
                 row.get_checked(0)
             })?
             .map(|res| res.map_err(BufkitDataErr::Database))
@@ -288,16 +288,6 @@ impl Archive {
 
         Inventory::new(init_times, model)
     }
-}
-
-/// Find the default archive root. This can be passed into the `create` and `connect` methods of
-/// `Archive`.
-pub fn default_root() -> Result<PathBuf, BufkitDataErr> {
-    let default_root = ::dirs::home_dir()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not find home directory"))?
-        .join("bufkit");
-
-    Ok(default_root)
 }
 
 /*--------------------------------------------------------------------------------------------------

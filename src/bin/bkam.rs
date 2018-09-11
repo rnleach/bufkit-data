@@ -1,5 +1,3 @@
 //! BufKit Archive Manager
 
-fn main(){
-    
-}
+fn main() {}
