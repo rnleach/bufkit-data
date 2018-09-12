@@ -17,6 +17,7 @@ use models::Model;
 use site::{Site, StateProv};
 
 /// The archive.
+#[derive(Debug)]
 pub struct Archive {
     data_root: PathBuf,  // the directory containing the downloaded files.
     db_conn: Connection, // An sqlite connection.
@@ -24,7 +25,7 @@ pub struct Archive {
 
 impl Archive {
     const DATA_DIR: &'static str = "data";
-    const DB_FILE: &'static str = "index";
+    const DB_FILE: &'static str = "index.db";
 
     /// Initialize a new archive.
     pub fn create_new<T>(root: T) -> Result<Self, BufkitDataErr>
