@@ -50,7 +50,6 @@ fn run() -> Result<(), Error> {
     let app = CommonCmdLineArgs::new_app("bufdn", "Download data into your archive.");
 
     let (common_args, _matches) = CommonCmdLineArgs::matches(app, false)?;
-    println!("common_args: {:#?}", common_args);
 
     let arch = Archive::connect(common_args.root())?;
     let client = Client::new();
