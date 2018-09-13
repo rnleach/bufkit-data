@@ -8,9 +8,19 @@ use chrono::{Duration, NaiveDateTime};
 #[allow(missing_docs)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter)]
 pub enum Model {
-    #[strum(serialize = "gfs", serialize = "gfs3", serialize = "GFS", serialize = "GFS3")]
+    #[strum(
+        serialize = "gfs",
+        serialize = "gfs3",
+        serialize = "GFS",
+        serialize = "GFS3"
+    )]
     GFS,
-    #[strum(serialize = "nam", serialize = "namm", serialize = "NAM", serialize = "NAMM")]
+    #[strum(
+        serialize = "nam",
+        serialize = "namm",
+        serialize = "NAM",
+        serialize = "NAMM"
+    )]
     NAM,
     #[strum(serialize = "nam4km", serialize = "NAM4KM")]
     NAM4KM,
@@ -57,12 +67,27 @@ impl Model {
     ) -> impl Iterator<Item = NaiveDateTime> {
         debug_assert!(start <= end);
 
-        let steps: i64 = (*end - *start).num_hours() / self.hours_between_runs();
         let delta_t = self.hours_between_runs();
-        let mut round_start = start.date().and_hms(0, 0, 0);
+
+        //
+        // Find a good start time.
+        //
+        let mut round_start = start.date().and_hms(0, 0, 0) + Duration::hours(self.base_hour());
+        // Make sure we didn't jump ahead into the future.
+        while round_start > *start {
+            round_start -= Duration::hours(self.hours_between_runs());
+        }
+        // Make sure we didn't jumb too far back.
         while round_start < *start {
             round_start += Duration::hours(self.hours_between_runs());
         }
+
+        // Ultimately make sure we start before we end.
+        while round_start > *end {
+            round_start -= Duration::hours(self.hours_between_runs());
+        }
+
+        let steps: i64 = (*end - round_start).num_hours() / self.hours_between_runs();
 
         (0..=steps).map(move |step| round_start + Duration::hours(step * delta_t))
     }

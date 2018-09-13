@@ -100,13 +100,20 @@ impl Archive {
                 let elev_m = row.get(6);
                 let notes = row.get(3);
                 let state: Option<StateProv> = row
-                    .get_checked::<_,String>(2)
+                    .get_checked::<_, String>(2)
                     .ok()
                     .and_then(|a_string| StateProv::from_str(&a_string).ok());
 
-                Site {id, name, lat, lon, elev_m, notes, state}
-            })?
-            .map(|res| res.map_err(BufkitDataErr::Database))
+                Site {
+                    id,
+                    name,
+                    lat,
+                    lon,
+                    elev_m,
+                    notes,
+                    state,
+                }
+            })?.map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
 
         vals
@@ -285,8 +292,7 @@ impl Archive {
         let init_times: Result<Vec<Result<NaiveDateTime, _>>, BufkitDataErr> = stmt
             .query_map(&[&site_id.to_uppercase(), &model.as_static()], |row| {
                 row.get_checked(0)
-            })?
-            .map(|res| res.map_err(BufkitDataErr::Database))
+            })?.map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
 
         let init_times: Vec<NaiveDateTime> =
@@ -398,10 +404,8 @@ mod unit {
 
     #[test]
     fn test_sites_round_trip() {
-        let TestArchive {
-            tmp: _tmp,
-            arch,
-        } = create_test_archive().expect("Failed to create test archive.");
+        let TestArchive { tmp: _tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
 
         let test_sites = &[
             Site {
@@ -451,10 +455,8 @@ mod unit {
 
     #[test]
     fn test_files_round_trip() {
-        let TestArchive {
-            tmp: _tmp,
-            arch,
-        } = create_test_archive().expect("Failed to create test archive.");
+        let TestArchive { tmp: _tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
 
         let test_data = get_test_data().expect("Error loading test data.");
 
@@ -534,8 +536,7 @@ mod unit {
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(0, 0, 0)
-                )
-                .expect("Error checking for existence")
+                ).expect("Error checking for existence")
         );
         assert!(
             !arch
@@ -543,8 +544,7 @@ mod unit {
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(6, 0, 0)
-                )
-                .expect("Error checking for existence")
+                ).expect("Error checking for existence")
         );
         assert!(
             !arch
@@ -552,8 +552,7 @@ mod unit {
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(12, 0, 0)
-                )
-                .expect("Error checking for existence")
+                ).expect("Error checking for existence")
         );
         assert!(
             !arch
@@ -561,8 +560,7 @@ mod unit {
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(18, 0, 0)
-                )
-                .expect("Error checking for existence")
+                ).expect("Error checking for existence")
         );
     }
 

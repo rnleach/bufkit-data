@@ -40,8 +40,7 @@ impl<'a, 'b> CommonCmdLineArgs {
                     .long("sites")
                     .takes_value(true)
                     .help("Site identifiers (e.g. kord, katl, smn)."),
-            )
-            .arg(
+            ).arg(
                 Arg::with_name("models")
                     .multiple(true)
                     .short("m")
@@ -49,16 +48,14 @@ impl<'a, 'b> CommonCmdLineArgs {
                     .takes_value(true)
                     .help("Allowable models for this operation/program.")
                     .long_help("Allowable models for this operation/program. Case insensitive."),
-            )
-            .arg(
+            ).arg(
                 Arg::with_name("root")
                     .short("r")
                     .long("root")
                     .takes_value(true)
                     .help("Path to the archive.")
                     .long_help("Path to the archive. Defaults to '${HOME}/bufkit/'"),
-            )
-            .arg(
+            ).arg(
                 Arg::with_name("days-back")
                     .short("d")
                     .long("days-back")
@@ -66,8 +63,7 @@ impl<'a, 'b> CommonCmdLineArgs {
                     .default_value(Self::DEFAULT_DAYS_BACK)
                     .help("Number of days back to consider.")
                     .long_help("The number of days back to consider."),
-            )
-            .after_help(concat!(
+            ).after_help(concat!(
                 "For sites and models, if none are provided then the default is to",
                 " use all\navailable ones in the database.\n\n",
                 "If days back is 0 (the default), then only process the latest model runs,\n",

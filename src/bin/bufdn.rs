@@ -44,6 +44,7 @@ enum StepResult {
     OtherURLStatus(String, StatusCode), // URL, status code
     OtherDownloadError(Error),          // Any other error downloading
     ArhciveError(Error),                // Error adding it to the archive
+    Success,                            // File added to the archive
 }
 
 fn run() -> Result<(), Error> {
@@ -61,7 +62,10 @@ fn run() -> Result<(), Error> {
         // Filter out data already in the databse
         .filter(|(site, model, init_time)| !arch.exists(site, *model, init_time).unwrap_or(false))
         // Add the url
-        .map(|(site, model, init_time)| (site, model, init_time, build_url(site, model, &init_time)))
+        .map(|(site, model, init_time)| {
+            let url = build_url(&site, model, &init_time);
+            (site, model, init_time, url)
+        })
         // Attempt the download
         .map(|(site, model, init_time, url)|{
             let download_result = match client.get(&url).send(){
@@ -87,8 +91,8 @@ fn run() -> Result<(), Error> {
         .filter_map(|(site, model, init_time, res)|{
             match res {
                 StepResult::BufkitFileAsString(data) => {
-                    match arch.add_file(site, model, &init_time, &data) {
-                        Ok(_) => None,
+                    match arch.add_file(&site, model, &init_time, &data) {
+                        Ok(_) => Some((site, model, init_time, StepResult::Success)),
                         Err(err) => Some((site, model, init_time, StepResult::ArhciveError(err.into()))),
                     }
                 },
@@ -99,9 +103,8 @@ fn run() -> Result<(), Error> {
         .for_each(|(site, model, init_time, res)|{
             use StepResult::*;
 
-            println!("Error with {} {} for {}.", init_time, model, site);
             match res {
-                URLNotFound(url) => println!("  URL: {} does not exist.", url),
+                URLNotFound(url) => println!("  URL does not exist: {}", url),
                 OtherURLStatus(url, code) => println!("  HTTP error ({}): {}.", code, url),
                 OtherDownloadError(err)  | ArhciveError(err) => {
                     println!("  {}", err);
@@ -113,6 +116,7 @@ fn run() -> Result<(), Error> {
                         fail = cause;
                     }
                 },
+                Success => println!("Success for {:>4} {:^6} {}.", site, model, init_time),
                 _ => {},
             }
         });
@@ -122,36 +126,32 @@ fn run() -> Result<(), Error> {
 
 fn build_download_list<'a>(
     common_args: &'a CommonCmdLineArgs,
-) -> impl Iterator<Item = (&'a String, Model, NaiveDateTime)> {
+) -> impl Iterator<Item = (String, Model, NaiveDateTime)> + 'a {
     let sites = common_args.sites().iter();
     let models = common_args.models().iter();
 
-    let end = Utc::now().naive_utc();
+    let end = Utc::now().naive_utc() - Duration::hours(2);
     let start = Utc::now().naive_utc() - Duration::days(common_args.days_back());
 
     iproduct!(sites, models).flat_map(move |(site, model)| {
         model
             .all_runs(&(start - Duration::hours(model.hours_between_runs())), &end)
-            .map(move |init_time| (site, *model, init_time))
+            .map(move |init_time| (site.to_lowercase(), *model, init_time))
     })
 }
 
 fn invalid_combination(site: &str, model: Model) -> bool {
     match site {
-        "lrr" | "c17" => model == Model::NAM || model == Model::NAM4KM,
+        "lrr" | "c17" | "s06" => model == Model::NAM || model == Model::NAM4KM,
         "mrp" | "hmm" | "bon" => model == Model::GFS,
+        "kfca" => model == Model::NAM || model == Model::NAM4KM,
         _ => false, // All other combinations are OK
     }
 }
 
-fn translate_sites(site: &str, model: Model) -> &str {
-    match (site, model) {
-        ("kgpi", Model::GFS) => "kfca",
-        _ => site,
-    }
-}
-
 fn build_url(site: &str, model: Model, init_time: &NaiveDateTime) -> String {
+    let site = site.to_lowercase();
+
     let year = init_time.year();
     let month = init_time.month();
     let day = init_time.day();
@@ -163,7 +163,7 @@ fn build_url(site: &str, model: Model, init_time: &NaiveDateTime) -> String {
         (Model::NAM4KM, _) => "nam4km",
     };
 
-    let remote_site = translate_sites(site, model);
+    let remote_site = translate_sites(&site, model);
 
     let remote_file_name = remote_model.to_string() + "_" + remote_site + ".buf";
 
@@ -177,4 +177,11 @@ fn build_url(site: &str, model: Model, init_time: &NaiveDateTime) -> String {
         model.to_string().to_lowercase(),
         remote_file_name
     )
+}
+
+fn translate_sites(site: &str, model: Model) -> &str {
+    match (site, model) {
+        ("kgpi", Model::GFS) => "kfca",
+        _ => site,
+    }
 }
