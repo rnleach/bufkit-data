@@ -4,6 +4,7 @@
 
 extern crate bufkit_data;
 extern crate chrono;
+extern crate crossbeam_channel;
 #[macro_use]
 extern crate itertools;
 extern crate failure;
@@ -11,9 +12,11 @@ extern crate reqwest;
 
 use bufkit_data::{Archive, CommonCmdLineArgs, Model};
 use chrono::{Datelike, Duration, NaiveDateTime, Timelike, Utc};
+use crossbeam_channel as channel;
 use failure::{Error, Fail};
 use reqwest::{Client, StatusCode};
-use std::io::Read;
+use std::io::{Read, Write};
+use std::thread::{spawn, JoinHandle};
 
 static HOST_URL: &str = "http://mtarchive.geol.iastate.edu/";
 
@@ -51,9 +54,105 @@ fn run() -> Result<(), Error> {
     let app = CommonCmdLineArgs::new_app("bufdn", "Download data into your archive.");
 
     let (common_args, _matches) = CommonCmdLineArgs::matches(app, false)?;
+    let root_clone = common_args.root().to_path_buf();
 
     let arch = Archive::connect(common_args.root())?;
-    let client = Client::new();
+
+    let main_tx: channel::Sender<(String, Model, NaiveDateTime, String)>;
+    let dl_rx: channel::Receiver<(String, Model, NaiveDateTime, String)>;
+    let tx_rx = channel::bounded(10);
+    main_tx = tx_rx.0;
+    dl_rx = tx_rx.1;
+
+    let dl_tx: channel::Sender<(String, Model, NaiveDateTime, StepResult)>;
+    let save_rx: channel::Receiver<(String, Model, NaiveDateTime, StepResult)>;
+    let tx_rx = channel::bounded(10);
+    dl_tx = tx_rx.0;
+    save_rx = tx_rx.1;
+
+    let save_tx: channel::Sender<(String, Model, NaiveDateTime, StepResult)>;
+    let print_rx: channel::Receiver<(String, Model, NaiveDateTime, StepResult)>;
+    let tx_rx = channel::bounded(10);
+    save_tx = tx_rx.0;
+    print_rx = tx_rx.1;
+
+    // The file download thread
+    let download_handle: JoinHandle<Result<(), Error>> = spawn(move || {
+        let client = Client::new();
+
+        for vals in dl_rx {
+            let (site, model, init_time, url) = vals;
+
+            let download_result = match client.get(&url).send() {
+                Ok(ref mut response) => match response.status() {
+                    StatusCode::Ok => {
+                        let mut buffer = String::new();
+                        match response.read_to_string(&mut buffer) {
+                            Ok(_) => StepResult::BufkitFileAsString(buffer),
+                            Err(err) => StepResult::OtherDownloadError(err.into()),
+                        }
+                    }
+                    StatusCode::NotFound => StepResult::URLNotFound(url),
+                    code @ _ => StepResult::OtherURLStatus(url, code),
+                },
+                Err(err) => StepResult::OtherDownloadError(err.into()),
+            };
+
+            dl_tx.send((site, model, init_time, download_result));
+        }
+
+        Ok(())
+    });
+
+    // The db writer thread
+    let writer_handle: JoinHandle<Result<(), Error>> = spawn(move || {
+        let arch = Archive::connect(root_clone)?;
+
+        for (site, model, init_time, download_res) in save_rx {
+            let save_res = match download_res {
+                StepResult::BufkitFileAsString(data) => {
+                    match arch.add_file(&site, model, &init_time, &data) {
+                        Ok(_) => StepResult::Success,
+                        Err(err) => StepResult::ArhciveError(err.into()),
+                    }
+                }
+                _ => download_res,
+            };
+
+            save_tx.send((site, model, init_time, save_res));
+        }
+
+        Ok(())
+    });
+
+    // The printer thread
+    let printer_handle: JoinHandle<Result<(), Error>> = spawn(move || {
+        let stdout = ::std::io::stdout();
+        let mut lock = stdout.lock();
+
+        for (site, model, init_time, save_res) in print_rx {
+            use StepResult::*;
+
+            match save_res {
+                URLNotFound(url) => writeln!(lock, "URL does not exist: {}", url)?,
+                OtherURLStatus(url, code) => writeln!(lock, "  HTTP error ({}): {}.", code, url)?,
+                OtherDownloadError(err) | ArhciveError(err) => {
+                    writeln!(lock, "  {}", err)?;
+
+                    let mut fail: &Fail = err.as_fail();
+
+                    while let Some(cause) = fail.cause() {
+                        writeln!(lock, "  caused by: {}", cause)?;
+                        fail = cause;
+                    }
+                }
+                Success => writeln!(lock, "Success for {:>4} {:^6} {}.", site, model, init_time)?,
+                _ => {}
+            }
+        }
+
+        Ok(())
+    });
 
     // Start processing
     build_download_list(&common_args)
@@ -66,60 +165,13 @@ fn run() -> Result<(), Error> {
             let url = build_url(&site, model, &init_time);
             (site, model, init_time, url)
         })
-        // Attempt the download
-        .map(|(site, model, init_time, url)|{
-            let download_result = match client.get(&url).send(){
-                Ok(ref mut response) => {
-                    match response.status(){
-                        StatusCode::Ok => {
-                            let mut buffer = String::new();
-                            match response.read_to_string(&mut buffer){
-                                Ok(_) =>StepResult::BufkitFileAsString(buffer),
-                                Err(err) => StepResult::OtherDownloadError(err.into()),
-                            }
-                        },
-                        StatusCode::NotFound => StepResult::URLNotFound(url),
-                        code@_ => StepResult::OtherURLStatus(url, code),
-                    }
-                },
-                Err(err) => StepResult::OtherDownloadError(err.into()),
-            };
-
-            (site, model, init_time, download_result)
-        })
-        // Add the successful downloads to the archive
-        .filter_map(|(site, model, init_time, res)|{
-            match res {
-                StepResult::BufkitFileAsString(data) => {
-                    match arch.add_file(&site, model, &init_time, &data) {
-                        Ok(_) => Some((site, model, init_time, StepResult::Success)),
-                        Err(err) => Some((site, model, init_time, StepResult::ArhciveError(err.into()))),
-                    }
-                },
-                _ => Some((site, model, init_time, res))
-            }
-        })
-        // Print out the error messages
-        .for_each(|(site, model, init_time, res)|{
-            use StepResult::*;
-
-            match res {
-                URLNotFound(url) => println!("  URL does not exist: {}", url),
-                OtherURLStatus(url, code) => println!("  HTTP error ({}): {}.", code, url),
-                OtherDownloadError(err)  | ArhciveError(err) => {
-                    println!("  {}", err);
-
-                    let mut fail: &Fail = err.as_fail();
-
-                    while let Some(cause) = fail.cause() {
-                        println!("  caused by: {}", cause);
-                        fail = cause;
-                    }
-                },
-                Success => println!("Success for {:>4} {:^6} {}.", site, model, init_time),
-                _ => {},
-            }
+        .for_each(move |list_val: (String, Model, NaiveDateTime, String)|{
+            main_tx.send(list_val);
         });
+
+    download_handle.join().unwrap()?;
+    writer_handle.join().unwrap()?;
+    printer_handle.join().unwrap()?;
 
     Ok(())
 }
