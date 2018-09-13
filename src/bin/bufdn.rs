@@ -58,8 +58,6 @@ fn run() -> Result<(), Error> {
     build_download_list(&common_args)
         // Filter out known bad combinations
         .filter(|(site, model, _)| !invalid_combination(site, *model))
-        // map site names for some special cases
-        .map(|(site, model, init_time)| (translate_sites(site, model), model, init_time))
         // Filter out data already in the databse
         .filter(|(site, model, init_time)| !arch.exists(site, *model, init_time).unwrap_or(false))
         // Add the url
@@ -165,7 +163,9 @@ fn build_url(site: &str, model: Model, init_time: &NaiveDateTime) -> String {
         (Model::NAM4KM, _) => "nam4km",
     };
 
-    let remote_file_name = remote_model.to_string() + "_" + site + ".buf";
+    let remote_site = translate_sites(site, model);
+
+    let remote_file_name = remote_model.to_string() + "_" + remote_site + ".buf";
 
     format!(
         "{}{}/{:02}/{:02}/bufkit/{:02}/{}/{}",
