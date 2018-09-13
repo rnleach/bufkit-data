@@ -86,7 +86,7 @@ fn run() -> Result<(), Error> {
 
             (site, model, init_time, download_result)
         })
-        // Process the successful downloads
+        // Add the successful downloads to the archive
         .filter_map(|(site, model, init_time, res)|{
             match res {
                 StepResult::BufkitFileAsString(data) => {

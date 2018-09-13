@@ -92,14 +92,19 @@ impl Archive {
             .prepare("SELECT site,name,state,notes,latitude,longitude, elevation_m FROM sites")?;
 
         let vals: Result<Vec<Site>, BufkitDataErr> = stmt
-            .query_map(&[], |row| Site {
-                id: row.get(0),
-                name: row.get(1),
-                lat: row.get(4),
-                lon: row.get(5),
-                elev_m: row.get(6),
-                notes: row.get(3),
-                state: StateProv::from_str(&row.get::<_, String>(2)).ok(),
+            .query_map(&[], |row| {
+                let id = row.get(0);
+                let name = row.get(1);
+                let lat = row.get(4);
+                let lon = row.get(5);
+                let elev_m = row.get(6);
+                let notes = row.get(3);
+                let state: Option<StateProv> = row
+                    .get_checked::<_,String>(2)
+                    .ok()
+                    .and_then(|a_string| StateProv::from_str(&a_string).ok());
+
+                Site {id, name, lat, lon, elev_m, notes, state}
             })?
             .map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
@@ -395,7 +400,7 @@ mod unit {
     fn test_sites_round_trip() {
         let TestArchive {
             tmp: _tmp,
-            mut arch,
+            arch,
         } = create_test_archive().expect("Failed to create test archive.");
 
         let test_sites = &[
@@ -416,6 +421,15 @@ mod unit {
                 elev_m: None,
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
+            },
+            Site {
+                id: "kmso".to_uppercase(),
+                name: Some("Missoula".to_owned()),
+                lat: None,
+                lon: None,
+                elev_m: None,
+                notes: Some("A coastal city with coffe and rain".to_owned()),
+                state: None,
             },
         ];
 
@@ -439,7 +453,7 @@ mod unit {
     fn test_files_round_trip() {
         let TestArchive {
             tmp: _tmp,
-            mut arch,
+            arch,
         } = create_test_archive().expect("Failed to create test archive.");
 
         let test_data = get_test_data().expect("Error loading test data.");
