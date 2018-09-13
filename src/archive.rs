@@ -108,7 +108,7 @@ impl Archive {
     }
 
     /// Add a site to the list of sites.
-    pub fn add_site(&mut self, site: &Site) -> Result<(), BufkitDataErr> {
+    pub fn add_site(&self, site: &Site) -> Result<(), BufkitDataErr> {
         self.db_conn.execute(
             "INSERT INTO sites (site, latitude, longitude, elevation_m, state, name, notes)
                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -139,7 +139,7 @@ impl Archive {
 
     /// Add a bufkit file to the archive.
     pub fn add_file(
-        &mut self,
+        &self,
         site_id: &str,
         model: Model,
         init_time: &NaiveDateTime,

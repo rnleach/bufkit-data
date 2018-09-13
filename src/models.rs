@@ -59,9 +59,12 @@ impl Model {
 
         let steps: i64 = (*end - *start).num_hours() / self.hours_between_runs();
         let delta_t = self.hours_between_runs();
-        let start = start.clone();
+        let mut round_start = start.date().and_hms(0, 0, 0);
+        while round_start < *start {
+            round_start += Duration::hours(self.hours_between_runs());
+        }
 
-        (0..=steps).map(move |step| start + Duration::hours(step * delta_t))
+        (0..=steps).map(move |step| round_start + Duration::hours(step * delta_t))
     }
 }
 
@@ -76,14 +79,18 @@ mod unit {
 
     #[test]
     fn test_all_runs() {
-        let start = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 0, 0);
-        let end = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 0, 0);
-
         assert_eq!(
             Model::GFS.hours_between_runs(),
             6,
             "test pre-condition failed."
         );
+
+        let start = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 0, 0);
+        let end = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 0, 0);
         assert_eq!(Model::GFS.all_runs(start, end).count(), 5);
+
+        let start = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 1, 0);
+        let end = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 0, 0);
+        assert_eq!(Model::GFS.all_runs(start, end).count(), 4);
     }
 }
