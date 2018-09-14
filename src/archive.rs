@@ -193,7 +193,6 @@ impl Archive {
         text_data: &str,
     ) -> Result<(), BufkitDataErr> {
         if !self.site_exists(site_id)? {
-
             self.add_site(&Site {
                 id: site_id.to_owned(),
                 name: None,

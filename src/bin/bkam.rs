@@ -36,7 +36,7 @@ fn run() -> Result<(), Error> {
     let app = CommonCmdLineArgs::new_app("bkam", "Manage a Bufkit file archive.")
         .subcommand(
             SubCommand::with_name("create")
-                .about("Create a new archive. Ignores all global options except --root.")
+                .about("Create a new archive.")
                 .arg(
                     Arg::with_name("force")
                         .long("force")
@@ -44,13 +44,11 @@ fn run() -> Result<(), Error> {
                 ),
         ).subcommand(
             SubCommand::with_name("sites")
-                .about("View and manipulate site data. Ignores all global options except --root.")
+                .about("View and manipulate site data.")
                 .subcommand(
                     SubCommand::with_name("list")
-                        .about(concat!(
-                            "List sites in the data base. Ignores all global options",
-                            " except --root."
-                        )).arg(
+                        .about("List sites in the data base.")
+                        .arg(
                             Arg::with_name("missing-data")
                                 .short("m")
                                 .long("missing-data")
@@ -67,10 +65,8 @@ fn run() -> Result<(), Error> {
                         ),
                 ).subcommand(
                     SubCommand::with_name("modify")
-                        .about(concat!(
-                            "Modify the entry for a site. Ignores all global options ",
-                            "except --root."
-                        )).arg(
+                        .about("Modify the entry for a site.")
+                        .arg(
                             Arg::with_name("site")
                                 .index(1)
                                 .required(true)
@@ -94,10 +90,8 @@ fn run() -> Result<(), Error> {
                         ),
                 ).subcommand(
                     SubCommand::with_name("inv")
-                        .about(concat!(
-                            "Get the inventory of soundings for a site. Ignores all ",
-                            "global options except --root."
-                        )).arg(
+                        .about("Get the inventory of soundings for a site.")
+                        .arg(
                             Arg::with_name("site")
                                 .index(1)
                                 .required(true)
@@ -107,7 +101,7 @@ fn run() -> Result<(), Error> {
                 ),
         );
 
-    let (common_args, matches) = CommonCmdLineArgs::matches(app, true)?;
+    let (common_args, matches) = CommonCmdLineArgs::matches(app)?;
 
     match matches.subcommand() {
         ("create", Some(sub_args)) => create(common_args, sub_args)?,

@@ -4,21 +4,27 @@
 
 extern crate bufkit_data;
 extern crate chrono;
+extern crate clap;
 extern crate crossbeam_channel;
 #[macro_use]
 extern crate itertools;
 extern crate failure;
 extern crate reqwest;
+extern crate strum;
 
-use bufkit_data::{Archive, CommonCmdLineArgs, Model};
+use bufkit_data::{Archive, BufkitDataErr, CommonCmdLineArgs, Model};
 use chrono::{Datelike, Duration, NaiveDateTime, Timelike, Utc};
+use clap::{Arg, ArgMatches};
 use crossbeam_channel as channel;
 use failure::{Error, Fail};
 use reqwest::{Client, StatusCode};
 use std::io::{Read, Write};
+use std::str::FromStr;
 use std::thread::{spawn, JoinHandle};
+use strum::IntoEnumIterator;
 
 static HOST_URL: &str = "http://mtarchive.geol.iastate.edu/";
+const DEFAULT_DAYS_BACK: &str = "2";
 
 fn main() {
     if let Err(ref e) = run() {
@@ -51,9 +57,33 @@ enum StepResult {
 }
 
 fn run() -> Result<(), Error> {
-    let app = CommonCmdLineArgs::new_app("bufdn", "Download data into your archive.");
+    let app = CommonCmdLineArgs::new_app("bufdn", "Download data into your archive.")
+        .arg(
+            Arg::with_name("sites")
+                .multiple(true)
+                .short("s")
+                .long("sites")
+                .takes_value(true)
+                .help("Site identifiers (e.g. kord, katl, smn)."),
+        ).arg(
+            Arg::with_name("models")
+                .multiple(true)
+                .short("m")
+                .long("models")
+                .takes_value(true)
+                .help("Allowable models for this operation/program.")
+                .long_help("Allowable models for this operation/program. Case insensitive."),
+        ).arg(
+            Arg::with_name("days-back")
+                .short("d")
+                .long("days-back")
+                .takes_value(true)
+                .default_value(DEFAULT_DAYS_BACK)
+                .help("Number of days back to consider.")
+                .long_help("The number of days back to consider."),
+        );
 
-    let (common_args, _matches) = CommonCmdLineArgs::matches(app, false)?;
+    let (common_args, matches) = CommonCmdLineArgs::matches(app)?;
     let root_clone = common_args.root().to_path_buf();
 
     let arch = Archive::connect(common_args.root())?;
@@ -155,7 +185,7 @@ fn run() -> Result<(), Error> {
     });
 
     // Start processing
-    build_download_list(&common_args)
+    build_download_list(&matches, &arch)?
         // Filter out known bad combinations
         .filter(|(site, model, _)| !invalid_combination(site, *model))
         // Filter out data already in the databse
@@ -177,19 +207,43 @@ fn run() -> Result<(), Error> {
 }
 
 fn build_download_list<'a>(
-    common_args: &'a CommonCmdLineArgs,
-) -> impl Iterator<Item = (String, Model, NaiveDateTime)> + 'a {
-    let sites = common_args.sites().iter();
-    let models = common_args.models().iter();
+    arg_matches: &'a ArgMatches,
+    arch: &Archive,
+) -> Result<impl Iterator<Item = (String, Model, NaiveDateTime)> + 'a, BufkitDataErr> {
+    let mut sites: Vec<String> = arg_matches
+        .values_of("sites")
+        .into_iter()
+        .flat_map(|site_iter| site_iter.map(|arg_val| arg_val.to_owned()))
+        .collect();
+
+    let mut models: Vec<Model> = arg_matches
+        .values_of("models")
+        .into_iter()
+        .flat_map(|model_iter| model_iter.map(Model::from_str))
+        .filter_map(|res| res.ok())
+        .collect();
+
+    let days_back = arg_matches
+        .value_of("days-back")
+        .and_then(|val| val.parse::<i64>().ok())
+        .expect("Invalid days-back, not parseable as an integer.");
+
+    if sites.is_empty() {
+        sites = arch.get_sites()?.into_iter().map(|site| site.id).collect();
+    }
+
+    if models.is_empty() {
+        models = Model::iter().collect();
+    }
 
     let end = Utc::now().naive_utc() - Duration::hours(2);
-    let start = Utc::now().naive_utc() - Duration::days(common_args.days_back());
+    let start = Utc::now().naive_utc() - Duration::days(days_back);
 
-    iproduct!(sites, models).flat_map(move |(site, model)| {
+    Ok(iproduct!(sites, models).flat_map(move |(site, model)| {
         model
             .all_runs(&(start - Duration::hours(model.hours_between_runs())), &end)
-            .map(move |init_time| (site.to_lowercase(), *model, init_time))
-    })
+            .map(move |init_time| (site.to_lowercase(), model, init_time))
+    }))
 }
 
 fn invalid_combination(site: &str, model: Model) -> bool {
