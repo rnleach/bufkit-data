@@ -65,8 +65,8 @@ impl<'a, 'b> CommonCmdLineArgs {
                     .long_help("The number of days back to consider."),
             ).after_help(concat!(
                 "For sites and models, if none are provided then the default is to",
-                " use all\navailable ones in the database.\n\n",
-                "If days back is 0 (the default), then only process the latest model runs,\n",
+                " use all available ones in the database.\n\n",
+                "If days back is 0 (the default), then only process the latest model runs, ",
                 "whatever they are."
             ))
     }
