@@ -6,9 +6,10 @@ extern crate strum;
 
 extern crate bufkit_data;
 
-use bufkit_data::{Archive, CommonCmdLineArgs, Site};
+use bufkit_data::{Archive, CommonCmdLineArgs, Site, StateProv};
 use clap::{Arg, ArgMatches, SubCommand};
 use failure::{err_msg, Error, Fail};
+use std::str::FromStr;
 use strum::AsStaticRef;
 
 fn main() {
@@ -56,6 +57,11 @@ fn run() -> Result<(), Error> {
                             Arg::with_name("missing-state")
                                 .long("missing-state")
                                 .help("Only sites missing state/providence."),
+                        ).arg(
+                            Arg::with_name("state")
+                                .long("state")
+                                .help("Only sites in the given state.")
+                                .takes_value(true),
                         ),
                 ).subcommand(SubCommand::with_name("modify").about("Modify the entry for a site."))
                 .subcommand(
@@ -112,8 +118,35 @@ fn sites_list(
 ) -> Result<(), Error> {
     let arch = Archive::connect(common_args.root())?;
 
+    //
+    // This filter lets all sites pass
+    //
     let pass = &|_site: &Site| -> bool { true };
 
+    //
+    // Filter based on state
+    //
+    let state_value = if let Some(st) = sub_sub_args.value_of("state") {
+        StateProv::from_str(&st.to_uppercase()).unwrap_or(StateProv::AL)
+    } else {
+        StateProv::AL
+    };
+
+    let state_filter = &|site: &Site| -> bool {
+        match site.state {
+            Some(st) => st == state_value,
+            None => false,
+        }
+    };
+    let in_state_pred: &Fn(&Site) -> bool = if sub_sub_args.is_present("state") {
+        state_filter
+    } else {
+        pass
+    };
+
+    //
+    // Filter for missing any data
+    //
     let missing_any = &|site: &Site| -> bool {
         site.lat.is_none()
             || site.lon.is_none()
@@ -122,34 +155,39 @@ fn sites_list(
             || site.state.is_none()
             || site.notes.is_none()
     };
-
-    let missing_state = &|site: &Site| -> bool { site.state.is_none() };
-
     let missing_any_pred: &Fn(&Site) -> bool = if sub_sub_args.is_present("missing-data") {
         missing_any
     } else {
         pass
     };
 
+    //
+    // Filter for missing state
+    //
+    let missing_state = &|site: &Site| -> bool { site.state.is_none() };
     let missing_state_pred: &Fn(&Site) -> bool = if sub_sub_args.is_present("missing-state") {
         missing_state
     } else {
         pass
     };
 
+    //
+    // Combine filters to make an iterator over the sites.
+    //
     let master_list = arch.get_sites()?;
     let sites_iter = || {
         master_list
             .iter()
             .filter(|s| missing_any_pred(s))
             .filter(|s| missing_state_pred(s))
+            .filter(|s| in_state_pred(s))
     };
 
     if sites_iter().count() == 0 {
         println!("No sites matched criteria.");
     } else {
         println!(
-            "{:^4} {:^6} {:^7} {:^7} {:^5} {:^20} : {}",
+            "{:^4} {:^6} {:^7} {:^7} {:^5} {:<20} : {}",
             "ID", "LAT", "LON", "ELEV(m)", "STATE", "NAME", "NOTES"
         );
     }
@@ -174,7 +212,7 @@ fn sites_list(
         let name = site.name.as_ref().unwrap_or(&blank);
         let notes = site.notes.as_ref().unwrap_or(&blank);
         println!(
-            "{:<4} {:>} {:>} {:>} {:>5} {:>20} : {}",
+            "{:<4} {:>} {:>} {:>} {:^5} {:<20} : {}",
             id, lat, lon, elev, state, name, notes
         );
     }

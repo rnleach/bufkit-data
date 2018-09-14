@@ -25,6 +25,7 @@ impl Site {
 
 // State/Providence
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, AsStaticStr, EnumIter)]
+#[allow(missing_docs)]
 pub enum StateProv {
     AL, // Alabama
     AK, // Alaska

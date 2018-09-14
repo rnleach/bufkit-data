@@ -9,7 +9,7 @@ pub use cmd_line::CommonCmdLineArgs;
 pub use errors::BufkitDataErr;
 pub use inventory::Inventory;
 pub use models::Model;
-pub use site::Site;
+pub use site::{Site, StateProv};
 
 //
 // Implementation only
