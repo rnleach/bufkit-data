@@ -172,12 +172,7 @@ fn sites_list(
     // Filter for missing any data
     //
     let missing_any = &|site: &Site| -> bool {
-        site.lat.is_none()
-            || site.lon.is_none()
-            || site.elev_m.is_none()
-            || site.name.is_none()
-            || site.state.is_none()
-            || site.notes.is_none()
+        site.name.is_none() || site.state.is_none() || site.notes.is_none()
     };
     let missing_any_pred: &Fn(&Site) -> bool = if sub_sub_args.is_present("missing-data") {
         missing_any
@@ -210,35 +205,17 @@ fn sites_list(
     if sites_iter().count() == 0 {
         println!("No sites matched criteria.");
     } else {
-        println!(
-            "{:^4} {:^6} {:^7} {:^7} {:^5} {:<20} : {}",
-            "ID", "LAT", "LON", "ELEV(m)", "STATE", "NAME", "NOTES"
-        );
+        println!("{:^4} {:^5} {:<20} : {}", "ID", "STATE", "NAME", "NOTES");
     }
 
     let blank = "-".to_owned();
 
     for site in sites_iter() {
         let id = &site.id;
-        let lat = site
-            .lat
-            .map(|lat| format!("{:6.2}", lat))
-            .unwrap_or_else(|| "-".to_owned());
-        let lon = site
-            .lon
-            .map(|lon| format!("{:7.2}", lon))
-            .unwrap_or_else(|| "-".to_owned());
-        let elev = site
-            .elev_m
-            .map(|elev| format!("{:7.0}", elev))
-            .unwrap_or_else(|| "-".to_owned());
         let state = site.state.map(|st| st.as_static()).unwrap_or(&"-");
         let name = site.name.as_ref().unwrap_or(&blank);
         let notes = site.notes.as_ref().unwrap_or(&blank);
-        println!(
-            "{:<4} {:>} {:>} {:>} {:^5} {:<20} : {}",
-            id, lat, lon, elev, state, name, notes
-        );
+        println!("{:<4} {:^5} {:<20} : {}", id, state, name, notes);
     }
 
     Ok(())

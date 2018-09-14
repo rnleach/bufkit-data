@@ -58,9 +58,6 @@ impl Archive {
         db_conn.execute(
             "CREATE TABLE sites (
                 site        TEXT PRIMARY KEY,
-                latitude    REAL DEFAULT NULL,
-                longitude   REAL DEFAULT NULL,
-                elevation_m REAL DEFAULT NULL,
                 state       TEXT DEFAULT NULL,
                 name        TEXT DEFAULT NULL,
                 notes       TEXT DEFAULT NULL
@@ -89,15 +86,12 @@ impl Archive {
     pub fn get_sites(&self) -> Result<Vec<Site>, BufkitDataErr> {
         let mut stmt = self
             .db_conn
-            .prepare("SELECT site,name,state,notes,latitude,longitude, elevation_m FROM sites")?;
+            .prepare("SELECT site,name,state,notes FROM sites")?;
 
         let vals: Result<Vec<Site>, BufkitDataErr> = stmt
             .query_map(&[], |row| {
                 let id = row.get(0);
                 let name = row.get(1);
-                let lat = row.get(4);
-                let lon = row.get(5);
-                let elev_m = row.get(6);
                 let notes = row.get(3);
                 let state: Option<StateProv> = row
                     .get_checked::<_, String>(2)
@@ -107,9 +101,6 @@ impl Archive {
                 Site {
                     id,
                     name,
-                    lat,
-                    lon,
-                    elev_m,
                     notes,
                     state,
                 }
@@ -123,7 +114,7 @@ impl Archive {
     pub fn get_site_info(&self, site_id: &str) -> Result<Site, BufkitDataErr> {
         self.db_conn.query_row_and_then(
             "
-                SELECT site,name,state,notes,latitude,longitude, elevation_m 
+                SELECT site,name,state,notes 
                 FROM sites
                 WHERE site = ?1
             ",
@@ -131,9 +122,6 @@ impl Archive {
             |row| {
                 let id = row.get(0);
                 let name = row.get(1);
-                let lat = row.get(4);
-                let lon = row.get(5);
-                let elev_m = row.get(6);
                 let notes = row.get(3);
                 let state: Option<StateProv> = row
                     .get_checked::<_, String>(2)
@@ -143,9 +131,6 @@ impl Archive {
                 Ok(Site {
                     id,
                     name,
-                    lat,
-                    lon,
-                    elev_m,
                     notes,
                     state,
                 })
@@ -158,15 +143,12 @@ impl Archive {
         self.db_conn.execute(
             "
                 UPDATE sites 
-                SET (latitude, longitude, elevation_m, state, name, notes)
-                = (?2, ?3, ?4, ?5, ?6, ?7)
+                SET (state, name, notes)
+                = (?2, ?3, ?4)
                 WHERE site = ?1
             ",
             &[
                 &site.id.to_uppercase(),
-                &site.lat,
-                &site.lon,
-                &site.elev_m,
                 &site.state.map(|state_prov| state_prov.as_static()),
                 &site.name,
                 &site.notes,
@@ -179,13 +161,10 @@ impl Archive {
     /// Add a site to the list of sites.
     pub fn add_site(&self, site: &Site) -> Result<(), BufkitDataErr> {
         self.db_conn.execute(
-            "INSERT INTO sites (site, latitude, longitude, elevation_m, state, name, notes)
-                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO sites (site, state, name, notes)
+                  VALUES (?1, ?2, ?3, ?4)",
             &[
                 &site.id.to_uppercase(),
-                &site.lat,
-                &site.lon,
-                &site.elev_m,
                 &site.state.map(|state_prov| state_prov.as_static()),
                 &site.name,
                 &site.notes,
@@ -230,9 +209,6 @@ impl Archive {
             self.add_site(&Site {
                 id: site_id.to_owned(),
                 name: None,
-                lat,
-                lon,
-                elev_m,
                 notes: None,
                 state: None,
             })?;
@@ -468,27 +444,18 @@ mod unit {
             Site {
                 id: "kord".to_uppercase(),
                 name: Some("Chicago/O'Hare".to_owned()),
-                lat: None,
-                lon: None,
-                elev_m: None,
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
             },
             Site {
                 id: "ksea".to_uppercase(),
                 name: Some("Seattle".to_owned()),
-                lat: None,
-                lon: None,
-                elev_m: None,
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
             },
             Site {
                 id: "kmso".to_uppercase(),
                 name: Some("Missoula".to_owned()),
-                lat: None,
-                lon: None,
-                elev_m: None,
                 notes: Some("In a valley.".to_owned()),
                 state: None,
             },
@@ -519,27 +486,18 @@ mod unit {
             Site {
                 id: "kord".to_uppercase(),
                 name: Some("Chicago/O'Hare".to_owned()),
-                lat: None,
-                lon: None,
-                elev_m: None,
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
             },
             Site {
                 id: "ksea".to_uppercase(),
                 name: Some("Seattle".to_owned()),
-                lat: None,
-                lon: None,
-                elev_m: None,
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
             },
             Site {
                 id: "kmso".to_uppercase(),
                 name: Some("Missoula".to_owned()),
-                lat: None,
-                lon: None,
-                elev_m: None,
                 notes: Some("In a valley.".to_owned()),
                 state: None,
             },
@@ -561,27 +519,18 @@ mod unit {
             Site {
                 id: "kord".to_uppercase(),
                 name: Some("Chicago/O'Hare".to_owned()),
-                lat: None,
-                lon: None,
-                elev_m: None,
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
             },
             Site {
                 id: "ksea".to_uppercase(),
                 name: Some("Seattle".to_owned()),
-                lat: None,
-                lon: None,
-                elev_m: None,
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
             },
             Site {
                 id: "kmso".to_uppercase(),
                 name: Some("Missoula".to_owned()),
-                lat: None,
-                lon: None,
-                elev_m: None,
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: None,
             },
@@ -594,9 +543,6 @@ mod unit {
         let zootown = Site {
             id: "kmso".to_uppercase(),
             name: Some("Zootown".to_owned()),
-            lat: None,
-            lon: None,
-            elev_m: None,
             notes: Some("Mountains, not coast.".to_owned()),
             state: None,
         };

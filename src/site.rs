@@ -4,9 +4,6 @@
 pub struct Site {
     pub id: String,
     pub name: Option<String>,
-    pub lat: Option<f64>,
-    pub lon: Option<f64>,
-    pub elev_m: Option<f64>,
     pub notes: Option<String>,
     pub state: Option<StateProv>,
 }
@@ -14,12 +11,7 @@ pub struct Site {
 impl Site {
     /// Return true if there is any missing data.
     pub fn incomplete(&self) -> bool {
-        self.lat.is_none()
-            || self.lon.is_none()
-            || self.elev_m.is_none()
-            || self.name.is_none()
-            || self.notes.is_none()
-            || self.state.is_none()
+        self.name.is_none() || self.notes.is_none() || self.state.is_none()
     }
 }
 
@@ -94,6 +86,26 @@ mod unit {
 
     use std::str::FromStr;
     use strum::{AsStaticRef, IntoEnumIterator};
+
+    #[test]
+    fn test_site_incomplete() {
+        let complete_site = Site {
+            id: "kxly".to_owned(),
+            name: Some("tv station".to_owned()),
+            state: Some(StateProv::VI),
+            notes: Some("".to_owned()),
+        };
+
+        let incomplete_site = Site {
+            id: "kxly".to_owned(),
+            name: Some("tv station".to_owned()),
+            state: Some(StateProv::VI),
+            notes: None,
+        };
+
+        assert!(!complete_site.incomplete());
+        assert!(incomplete_site.incomplete());
+    }
 
     #[test]
     fn test_to_string_for_state_prov() {
