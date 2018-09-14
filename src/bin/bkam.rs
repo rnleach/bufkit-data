@@ -6,11 +6,11 @@ extern crate strum;
 
 extern crate bufkit_data;
 
-use bufkit_data::{Archive, CommonCmdLineArgs, Site, StateProv};
+use bufkit_data::{Archive, CommonCmdLineArgs, Model, Site, StateProv};
 use clap::{Arg, ArgMatches, SubCommand};
 use failure::{err_msg, Error, Fail};
 use std::str::FromStr;
-use strum::AsStaticRef;
+use strum::{AsStaticRef, IntoEnumIterator};
 
 fn main() {
     if let Err(ref e) = run() {
@@ -94,7 +94,16 @@ fn run() -> Result<(), Error> {
                         ),
                 ).subcommand(
                     SubCommand::with_name("inv")
-                        .about("Get the inventory of soundings for a site."),
+                        .about(concat!(
+                            "Get the inventory of soundings for a site. Ignores all ",
+                            "global options except --root."
+                        )).arg(
+                            Arg::with_name("site")
+                                .index(1)
+                                .required(true)
+                                .takes_value(true)
+                                .help("The site to get the inventory for."),
+                        ),
                 ),
         );
 
@@ -130,7 +139,7 @@ fn sites(common_args: CommonCmdLineArgs, sub_args: &ArgMatches) -> Result<(), Er
     match sub_args.subcommand() {
         ("list", Some(sub_sub_args)) => sites_list(common_args, sub_args, &sub_sub_args),
         ("modify", Some(sub_sub_args)) => sites_modify(common_args, sub_args, &sub_sub_args),
-        ("inv", Some(sub_sub_args)) => unimplemented!(),
+        ("inv", Some(sub_sub_args)) => sites_inventory(common_args, sub_args, &sub_sub_args),
         _ => unreachable!(),
     }
 }
@@ -248,5 +257,39 @@ fn sites_modify(
     }
 
     arch.set_site_info(&site)?;
+    Ok(())
+}
+
+fn sites_inventory(
+    common_args: CommonCmdLineArgs,
+    _sub_args: &ArgMatches,
+    sub_sub_args: &ArgMatches,
+) -> Result<(), Error> {
+    let arch = Archive::connect(common_args.root())?;
+
+    // Safe to unwrap because the argument is required.
+    let site = sub_sub_args.value_of("site").unwrap();
+
+    for model in Model::iter() {
+        let inv = arch.get_inventory(site, model)?;
+
+        println!("\nInventory for {} at {}.", model, site.to_uppercase());
+        println!("   start: {}", inv.first);
+        println!("     end: {}", inv.last);
+
+        if inv.missing.is_empty() {
+            println!("\n   No missing runs!");
+        } else {
+            println!("Missing:");
+            println!("{:^19} -> {:^19} : {:6}", "From", "To", "Cycles");
+            for missing in inv.missing.iter() {
+                let start = missing.0;
+                let end = missing.1;
+                let cycles = (end - start).num_hours() / model.hours_between_runs() + 1;
+                println!("{} -> {} : {:6}", start, end, cycles);
+            }
+        }
+    }
+
     Ok(())
 }

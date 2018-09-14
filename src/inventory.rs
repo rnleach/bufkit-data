@@ -11,7 +11,7 @@ use models::Model;
 pub struct Inventory {
     pub first: NaiveDateTime,
     pub last: NaiveDateTime,
-    pub missing: Vec<NaiveDateTime>,
+    pub missing: Vec<(NaiveDateTime, NaiveDateTime)>,
 }
 
 impl Inventory {
@@ -34,8 +34,13 @@ impl Inventory {
         for init_time in init_times {
             next_init_time += delta_hours;
 
+            if next_init_time < init_time {
+                let start = next_init_time;
+                let last = init_time - delta_hours;
+                missing.push((start, last));
+            }
+
             while next_init_time < init_time {
-                missing.push(next_init_time);
                 next_init_time += delta_hours;
             }
         }

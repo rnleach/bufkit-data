@@ -8,7 +8,6 @@ use std::str::FromStr;
 use chrono::NaiveDateTime;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{Connection, OpenFlags};
-use sounding_bufkit::BufkitData;
 use strum::AsStaticRef;
 
 use errors::BufkitDataErr;
@@ -194,17 +193,6 @@ impl Archive {
         text_data: &str,
     ) -> Result<(), BufkitDataErr> {
         if !self.site_exists(site_id)? {
-            let anal = BufkitData::new(text_data)?
-                .into_iter()
-                .nth(0)
-                .ok_or(BufkitDataErr::NotEnoughData)?;
-            let snd = anal.sounding();
-            let (lat, lon) = match snd.get_station_info().location() {
-                Some((lat, lon)) => (Some(lat), Some(lon)),
-                None => (None, None),
-            };
-
-            let elev_m = snd.get_station_info().elevation().into_option();
 
             self.add_site(&Site {
                 id: site_id.to_owned(),
@@ -675,7 +663,10 @@ mod unit {
 
         let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
         let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
-        let missing = vec![NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0)];
+        let missing = vec![(
+            NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0),
+            NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0),
+        )];
 
         let expected = Inventory {
             first,
