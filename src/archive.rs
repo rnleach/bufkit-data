@@ -148,7 +148,9 @@ impl Archive {
                     elev_m,
                     notes,
                     state,
-                })})
+                })
+            },
+        )
     }
 
     /// Modify a sites values.
@@ -509,7 +511,7 @@ mod unit {
     }
 
     #[test]
-    fn test_get_site_info(){
+    fn test_get_site_info() {
         let TestArchive { tmp: _tmp, arch } =
             create_test_archive().expect("Failed to create test archive.");
 
@@ -551,7 +553,7 @@ mod unit {
     }
 
     #[test]
-    fn test_set_site_info(){
+    fn test_set_site_info() {
         let TestArchive { tmp: _tmp, arch } =
             create_test_archive().expect("Failed to create test archive.");
 
@@ -590,14 +592,14 @@ mod unit {
         }
 
         let zootown = Site {
-                id: "kmso".to_uppercase(),
-                name: Some("Zootown".to_owned()),
-                lat: None,
-                lon: None,
-                elev_m: None,
-                notes: Some("Mountains, not coast.".to_owned()),
-                state: None,
-            };
+            id: "kmso".to_uppercase(),
+            name: Some("Zootown".to_owned()),
+            lat: None,
+            lon: None,
+            elev_m: None,
+            notes: Some("Mountains, not coast.".to_owned()),
+            state: None,
+        };
 
         arch.set_site_info(&zootown).expect("Error updating site.");
 

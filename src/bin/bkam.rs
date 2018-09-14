@@ -44,13 +44,13 @@ fn run() -> Result<(), Error> {
                 ),
         ).subcommand(
             SubCommand::with_name("sites")
-                .about("View and manipulate site data. Ignores all global options except --root."
-                ).subcommand(
+                .about("View and manipulate site data. Ignores all global options except --root.")
+                .subcommand(
                     SubCommand::with_name("list")
-                        .about(concat!("List sites in the data base. Ignores all global options",
-                            " except --root.")
-                        )
-                        .arg(
+                        .about(concat!(
+                            "List sites in the data base. Ignores all global options",
+                            " except --root."
+                        )).arg(
                             Arg::with_name("missing-data")
                                 .short("m")
                                 .long("missing-data")
@@ -249,7 +249,6 @@ fn sites_modify(
     _sub_args: &ArgMatches,
     sub_sub_args: &ArgMatches,
 ) -> Result<(), Error> {
-    
     let arch = Archive::connect(common_args.root())?;
 
     // Safe to unwrap because the argument is required.
@@ -257,13 +256,13 @@ fn sites_modify(
     let mut site = arch.get_site_info(site)?;
 
     if let Some(new_state) = sub_sub_args.value_of("state") {
-        match  StateProv::from_str(&new_state.to_uppercase()){
+        match StateProv::from_str(&new_state.to_uppercase()) {
             Ok(new_state) => site.state = Some(new_state),
             Err(_) => println!("Unable to parse state/providence: {}", new_state),
         }
     }
 
-    if let Some(new_name) = sub_sub_args.value_of("name"){
+    if let Some(new_name) = sub_sub_args.value_of("name") {
         site.name = Some(new_name.to_owned());
     }
 
