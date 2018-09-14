@@ -119,6 +119,61 @@ impl Archive {
         vals
     }
 
+    /// Retrieve the information about a single site.
+    pub fn get_site_info(&self, site_id: &str) -> Result<Site, BufkitDataErr> {
+        self.db_conn.query_row_and_then(
+            "
+                SELECT site,name,state,notes,latitude,longitude, elevation_m 
+                FROM sites
+                WHERE site = ?1
+            ",
+            &[&site_id.to_uppercase()],
+            |row| {
+                let id = row.get(0);
+                let name = row.get(1);
+                let lat = row.get(4);
+                let lon = row.get(5);
+                let elev_m = row.get(6);
+                let notes = row.get(3);
+                let state: Option<StateProv> = row
+                    .get_checked::<_, String>(2)
+                    .ok()
+                    .and_then(|a_string| StateProv::from_str(&a_string).ok());
+
+                Ok(Site {
+                    id,
+                    name,
+                    lat,
+                    lon,
+                    elev_m,
+                    notes,
+                    state,
+                })})
+    }
+
+    /// Modify a sites values.
+    pub fn set_site_info(&self, site: &Site) -> Result<(), BufkitDataErr> {
+        self.db_conn.execute(
+            "
+                UPDATE sites 
+                SET (latitude, longitude, elevation_m, state, name, notes)
+                = (?2, ?3, ?4, ?5, ?6, ?7)
+                WHERE site = ?1
+            ",
+            &[
+                &site.id.to_uppercase(),
+                &site.lat,
+                &site.lon,
+                &site.elev_m,
+                &site.state.map(|state_prov| state_prov.as_static()),
+                &site.name,
+                &site.notes,
+            ],
+        )?;
+
+        Ok(())
+    }
+
     /// Add a site to the list of sites.
     pub fn add_site(&self, site: &Site) -> Result<(), BufkitDataErr> {
         self.db_conn.execute(
@@ -432,7 +487,7 @@ mod unit {
                 lat: None,
                 lon: None,
                 elev_m: None,
-                notes: Some("A coastal city with coffe and rain".to_owned()),
+                notes: Some("In a valley.".to_owned()),
                 state: None,
             },
         ];
@@ -451,6 +506,103 @@ mod unit {
             println!("{:#?}", site);
             assert!(test_sites.iter().find(|st| **st == site).is_some());
         }
+    }
+
+    #[test]
+    fn test_get_site_info(){
+        let TestArchive { tmp: _tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
+
+        let test_sites = &[
+            Site {
+                id: "kord".to_uppercase(),
+                name: Some("Chicago/O'Hare".to_owned()),
+                lat: None,
+                lon: None,
+                elev_m: None,
+                notes: Some("Major air travel hub.".to_owned()),
+                state: Some(StateProv::IL),
+            },
+            Site {
+                id: "ksea".to_uppercase(),
+                name: Some("Seattle".to_owned()),
+                lat: None,
+                lon: None,
+                elev_m: None,
+                notes: Some("A coastal city with coffe and rain".to_owned()),
+                state: Some(StateProv::WA),
+            },
+            Site {
+                id: "kmso".to_uppercase(),
+                name: Some("Missoula".to_owned()),
+                lat: None,
+                lon: None,
+                elev_m: None,
+                notes: Some("In a valley.".to_owned()),
+                state: None,
+            },
+        ];
+
+        for site in test_sites {
+            arch.add_site(site).expect("Error adding site.");
+        }
+
+        assert_eq!(arch.get_site_info("ksea").unwrap(), test_sites[1]);
+    }
+
+    #[test]
+    fn test_set_site_info(){
+        let TestArchive { tmp: _tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
+
+        let test_sites = &[
+            Site {
+                id: "kord".to_uppercase(),
+                name: Some("Chicago/O'Hare".to_owned()),
+                lat: None,
+                lon: None,
+                elev_m: None,
+                notes: Some("Major air travel hub.".to_owned()),
+                state: Some(StateProv::IL),
+            },
+            Site {
+                id: "ksea".to_uppercase(),
+                name: Some("Seattle".to_owned()),
+                lat: None,
+                lon: None,
+                elev_m: None,
+                notes: Some("A coastal city with coffe and rain".to_owned()),
+                state: Some(StateProv::WA),
+            },
+            Site {
+                id: "kmso".to_uppercase(),
+                name: Some("Missoula".to_owned()),
+                lat: None,
+                lon: None,
+                elev_m: None,
+                notes: Some("A coastal city with coffe and rain".to_owned()),
+                state: None,
+            },
+        ];
+
+        for site in test_sites {
+            arch.add_site(site).expect("Error adding site.");
+        }
+
+        let zootown = Site {
+                id: "kmso".to_uppercase(),
+                name: Some("Zootown".to_owned()),
+                lat: None,
+                lon: None,
+                elev_m: None,
+                notes: Some("Mountains, not coast.".to_owned()),
+                state: None,
+            };
+
+        arch.set_site_info(&zootown).expect("Error updating site.");
+
+        assert_eq!(arch.get_site_info("kmso").unwrap(), zootown);
+        assert_ne!(arch.get_site_info("kmso").unwrap(), test_sites[2]);
     }
 
     #[test]

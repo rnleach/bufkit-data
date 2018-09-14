@@ -36,7 +36,7 @@ fn run() -> Result<(), Error> {
     let app = CommonCmdLineArgs::new_app("bkam", "Manage a Bufkit file archive.")
         .subcommand(
             SubCommand::with_name("create")
-                .about("Create a new archive. Ignores all options except --root and --force.")
+                .about("Create a new archive. Ignores all global options except --root.")
                 .arg(
                     Arg::with_name("force")
                         .long("force")
@@ -44,10 +44,12 @@ fn run() -> Result<(), Error> {
                 ),
         ).subcommand(
             SubCommand::with_name("sites")
-                .about("View and manipulate site data.")
-                .subcommand(
+                .about("View and manipulate site data. Ignores all global options except --root."
+                ).subcommand(
                     SubCommand::with_name("list")
-                        .about("List sites in the data base.")
+                        .about(concat!("List sites in the data base. Ignores all global options",
+                            " except --root.")
+                        )
                         .arg(
                             Arg::with_name("missing-data")
                                 .short("m")
@@ -63,13 +65,36 @@ fn run() -> Result<(), Error> {
                                 .help("Only sites in the given state.")
                                 .takes_value(true),
                         ),
-                ).subcommand(SubCommand::with_name("modify").about("Modify the entry for a site."))
-                .subcommand(
+                ).subcommand(
+                    SubCommand::with_name("modify")
+                        .about(concat!(
+                            "Modify the entry for a site. Ignores all global options ",
+                            "except --root."
+                        )).arg(
+                            Arg::with_name("site")
+                                .index(1)
+                                .required(true)
+                                .takes_value(true)
+                                .help("The site to modify."),
+                        ).arg(
+                            Arg::with_name("state")
+                                .long("state")
+                                .takes_value(true)
+                                .help("Set the state field to this value."),
+                        ).arg(
+                            Arg::with_name("name")
+                                .long("name")
+                                .takes_value(true)
+                                .help("Set the name field to this value."),
+                        ).arg(
+                            Arg::with_name("notes")
+                                .long("notes")
+                                .takes_value(true)
+                                .help("Set the name field to this value."),
+                        ),
+                ).subcommand(
                     SubCommand::with_name("inv")
                         .about("Get the inventory of soundings for a site."),
-                ).subcommand(
-                    SubCommand::with_name("export")
-                        .about("Export a sounding from the archive in its raw format."),
                 ),
         );
 
@@ -104,9 +129,8 @@ fn create(common_args: CommonCmdLineArgs, sub_args: &ArgMatches) -> Result<(), E
 fn sites(common_args: CommonCmdLineArgs, sub_args: &ArgMatches) -> Result<(), Error> {
     match sub_args.subcommand() {
         ("list", Some(sub_sub_args)) => sites_list(common_args, sub_args, &sub_sub_args),
-        ("modify", Some(sub_sub_args)) => unimplemented!(),
+        ("modify", Some(sub_sub_args)) => sites_modify(common_args, sub_args, &sub_sub_args),
         ("inv", Some(sub_sub_args)) => unimplemented!(),
-        ("export", Some(sub_sub_args)) => unimplemented!(),
         _ => unreachable!(),
     }
 }
@@ -217,5 +241,36 @@ fn sites_list(
         );
     }
 
+    Ok(())
+}
+
+fn sites_modify(
+    common_args: CommonCmdLineArgs,
+    _sub_args: &ArgMatches,
+    sub_sub_args: &ArgMatches,
+) -> Result<(), Error> {
+    
+    let arch = Archive::connect(common_args.root())?;
+
+    // Safe to unwrap because the argument is required.
+    let site = sub_sub_args.value_of("site").unwrap();
+    let mut site = arch.get_site_info(site)?;
+
+    if let Some(new_state) = sub_sub_args.value_of("state") {
+        match  StateProv::from_str(&new_state.to_uppercase()){
+            Ok(new_state) => site.state = Some(new_state),
+            Err(_) => println!("Unable to parse state/providence: {}", new_state),
+        }
+    }
+
+    if let Some(new_name) = sub_sub_args.value_of("name"){
+        site.name = Some(new_name.to_owned());
+    }
+
+    if let Some(new_notes) = sub_sub_args.value_of("notes") {
+        site.notes = Some(new_notes.to_owned())
+    }
+
+    arch.set_site_info(&site)?;
     Ok(())
 }
