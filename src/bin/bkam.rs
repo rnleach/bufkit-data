@@ -1,5 +1,6 @@
 //! BufKit Archive Manager
 
+extern crate chrono;
 extern crate clap;
 extern crate failure;
 extern crate strum;
@@ -7,8 +8,12 @@ extern crate strum;
 extern crate bufkit_data;
 
 use bufkit_data::{Archive, CommonCmdLineArgs, Model, Site, StateProv};
+use chrono::{NaiveDate, NaiveDateTime};
 use clap::{Arg, ArgMatches, SubCommand};
 use failure::{err_msg, Error, Fail};
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 use std::str::FromStr;
 use strum::{AsStaticRef, IntoEnumIterator};
 
@@ -99,6 +104,46 @@ fn run() -> Result<(), Error> {
                                 .help("The site to get the inventory for."),
                         ),
                 ),
+        ).subcommand(
+            SubCommand::with_name("export")
+                .about("Export a sounding from the database")
+                .arg(
+                    Arg::with_name("start")
+                        .long("start")
+                        .takes_value(true)
+                        .help("The starting model inititialization time. YYYY-MM-DD-HH")
+                        .long_help(concat!(
+                            "The initialization time of the first model run to export.",
+                            " Format is YYYY-MM-DD-HH. If the --end argument is not specified",
+                            " then the end time is assumed to be the last available run in the",
+                            " archive."
+                        )),
+                ).arg(
+                    Arg::with_name("end")
+                        .long("end")
+                        .takes_value(true)
+                        .requires("start")
+                        .help("The last model inititialization time. YYYY-MM-DD-HH")
+                        .long_help(concat!(
+                            "The initialization time of the last model run to export.",
+                            " Format is YYYY-MM-DD-HH."
+                        )),
+                ).arg(
+                    Arg::with_name("site")
+                        .index(1)
+                        .required(true)
+                        .help("The site to export data for."),
+                ).arg(
+                    Arg::with_name("model")
+                        .index(2)
+                        .required(true)
+                        .help("The model to export data for, e.g. gfs, GFS, NAM4KM, nam."),
+                ).arg(
+                    Arg::with_name("target")
+                        .index(3)
+                        .required(true)
+                        .help("Target directory to save the export file into."),
+                ),
         );
 
     let (common_args, matches) = CommonCmdLineArgs::matches(app)?;
@@ -106,6 +151,7 @@ fn run() -> Result<(), Error> {
     match matches.subcommand() {
         ("create", Some(sub_args)) => create(common_args, sub_args)?,
         ("sites", Some(sub_args)) => sites(common_args, sub_args)?,
+        ("export", Some(sub_args)) => export(common_args, sub_args)?,
         _ => unreachable!(),
     }
 
@@ -283,6 +329,87 @@ fn sites_inventory(
                 println!("{} -> {} : {:6}", start, end, cycles);
             }
         }
+    }
+
+    Ok(())
+}
+
+fn export(common_args: CommonCmdLineArgs, sub_args: &ArgMatches) -> Result<(), Error> {
+    let bail = |msg: &str| -> ! {
+        println!("{}", msg);
+        ::std::process::exit(1);
+    };
+
+    let arch = Archive::connect(common_args.root())?;
+
+    // unwrap is ok, these are required.
+    let site = sub_args.value_of("site").unwrap();
+    let model = sub_args.value_of("model").unwrap();
+    let target = sub_args.value_of("target").unwrap();
+
+    //
+    // Validate required arguments.
+    //
+    if !arch.site_exists(site)? {
+        bail(&format!("Site {} does not exist in the archive!", site));
+    }
+
+    let model = match Model::from_str(model) {
+        Ok(model) => model,
+        Err(_) => {
+            bail(&format!("Model {} does not exist in the archive!", model));
+        }
+    };
+
+    let target = Path::new(target);
+    if !target.is_dir() {
+        bail(&format!(
+            "Path {} is not a directory that already exists.",
+            target.display()
+        ));
+    }
+
+    //
+    //  Set up optional arguments.
+    //
+    let parse_date_string = |dt_str: &str| -> NaiveDateTime {
+        let hour: u32 = match dt_str[11..].parse() {
+            Ok(hour) => hour,
+            Err(_) => bail(&format!("Could not parse date: {}", dt_str)),
+        };
+
+        let date = match NaiveDate::parse_from_str(&dt_str[..10], "%Y-%m-%d") {
+            Ok(date) => date,
+            Err(_) => bail(&format!("Could not parse date: {}", dt_str)),
+        };
+
+        date.and_hms(hour, 0, 0)
+    };
+
+    let start_date = if let Some(start_date) = sub_args.value_of("start") {
+        parse_date_string(start_date)
+    } else {
+        arch.get_most_recent_valid_time(site, model)?
+    };
+
+    let end_date = if let Some(end_date) = sub_args.value_of("end") {
+        parse_date_string(end_date)
+    } else if sub_args.is_present("start") {
+        arch.get_most_recent_valid_time(site, model)?
+    } else {
+        start_date
+    };
+
+    for init_time in model.all_runs(&start_date, &end_date) {
+        if !arch.exists(site, model, &init_time)? {
+            continue;
+        }
+
+        let save_path = target.join(arch.file_name(site, model, &init_time));
+        let data = arch.get_file(site, model, &init_time)?;
+        let mut f = File::create(save_path)?;
+        let mut bw = BufWriter::new(f);
+        bw.write_all(data.as_bytes())?;
     }
 
     Ok(())

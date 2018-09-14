@@ -201,7 +201,7 @@ impl Archive {
             })?;
         }
 
-        let file_name = self.build_file_name(site_id, model, init_time);
+        let file_name = self.compressed_file_name(site_id, model, init_time);
         let file = File::create(self.data_root.join(&file_name))?;
         let mut encoder = GzEncoder::new(file, Compression::default());
         encoder.write_all(text_data.as_bytes())?;
@@ -270,17 +270,32 @@ impl Archive {
         self.get_file(site_id, model, &init_time)
     }
 
-    fn build_file_name(&self, site_id: &str, model: Model, init_time: &NaiveDateTime) -> String {
+    fn compressed_file_name(
+        &self,
+        site_id: &str,
+        model: Model,
+        init_time: &NaiveDateTime,
+    ) -> String {
         let file_string = init_time.format("%Y%m%d%HZ").to_string();
 
-        // Correct for misnomers.
-        let site = if model == Model::GFS && site_id == "kfca" {
-            &"kgpi"
-        } else {
-            site_id
-        };
+        format!(
+            "{}_{}_{}.buf.gz",
+            file_string,
+            model.as_static(),
+            site_id.to_uppercase()
+        )
+    }
 
-        format!("{}_{}_{}.buf.gz", file_string, model.as_static(), site)
+    /// Get the file name this would have if uncompressed.
+    pub fn file_name(&self, site_id: &str, model: Model, init_time: &NaiveDateTime) -> String {
+        let file_string = init_time.format("%Y%m%d%HZ").to_string();
+
+        format!(
+            "{}_{}_{}.buf",
+            file_string,
+            model.as_static(),
+            site_id.to_uppercase()
+        )
     }
 
     /// Check to see if a file is present in the archive and it is retrieveable.
