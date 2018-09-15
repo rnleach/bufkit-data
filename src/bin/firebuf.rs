@@ -40,9 +40,21 @@ fn main() {
 }
 
 fn run() -> Result<(), Error> {
-    let args = parse_args()?;
+    let args = &parse_args()?;
 
     println!("{:#?}", args);
+
+    for site in args.sites.iter() {
+        let stats = &calculate_stats(args, site)?;
+
+        if args.print {
+            print_stats(args, site, stats)?;
+        }
+
+        if args.save_dir.is_some() {
+            save_stats(args, site, stats)?;
+        }
+    }
 
     Ok(())
 }
@@ -78,11 +90,14 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
                 .long("table-stats")
                 .takes_value(true)
                 .possible_values(
-                    &Stat::iter()
+                    &TableStatArg::iter()
                         .map(|val| val.as_static())
                         .collect::<Vec<&str>>(),
                 ).help("Which statistics to show in the table.")
-                .long_help("Which statistics to show in the table. Defaults to all possible."),
+                .long_help(concat!(
+                    "Which statistics to show in the table.",
+                    " Defaults to HDW,  MaxHDW, MaxHDWTime, and AutoHaines"
+                )),
         ).arg(
             Arg::with_name("graph-stats")
                 .multiple(true)
@@ -90,26 +105,15 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
                 .long("graph-stats")
                 .takes_value(true)
                 .possible_values(
-                    &Stat::iter()
+                    &GraphStatArg::iter()
                         .map(|val| val.as_static())
                         .collect::<Vec<&str>>(),
                 ).help("Which statistics to plot make a graph for.")
                 .long_help(concat!(
-                    "Which statistics to plot make a graph for.",
-                    " Defaults to all possible.",
-                    " All graphs plot all available data."
+                    "Which statistics to plot a graph for.",
+                    " Defaults to HDW and AutoHaines.",
+                    " All graphs plot all available data, but each model is on an individual axis."
                 )),
-        ).arg(
-            Arg::with_name("mode")
-                .takes_value(true)
-                .multiple(false)
-                .possible_values(
-                    &Mode::iter()
-                        .map(|val| val.as_static())
-                        .collect::<Vec<&str>>(),
-                ).long("mode")
-                .help("Which daily value to put in the table.")
-                .default_value("00Z"),
         ).arg(
             Arg::with_name("init-time")
                 .long("init-time")
@@ -119,8 +123,25 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
                 .long_help(concat!(
                     "The initialization time of the model run to analyze.",
                     " Format is YYYY-MM-DD-HH. If not specified then the model run is assumed to",
-                    " be the last available run in the  archive."
+                    " be the last available run in the archive."
                 )),
+        ).arg(
+            Arg::with_name("save-dir")
+                .long("save-dir")
+                .takes_value(true)
+                .help("Directory to save .csv files to.")
+                .long_help(concat!(
+                    "Directory to save .csv files to. If this is specified then a file 'site.csv'",
+                    " is created for each site in that directory with data for all models."
+                )),
+        ).arg(
+            Arg::with_name("print")
+                .long("print")
+                .short("p")
+                .possible_values(&["Y", "N", "y", "n"])
+                .default_value("y")
+                .takes_value(true)
+                .help("Print the results to the terminal."),
         );
 
     let (common_args, matches) = CommonCmdLineArgs::matches(app)?;
@@ -154,26 +175,28 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
         models = Model::iter().collect();
     }
 
-    let mut table_stats: Vec<Stat> = matches
+    let mut table_stats: Vec<TableStatArg> = matches
         .values_of("table-stats")
         .into_iter()
-        .flat_map(|stat_iter| stat_iter.map(Stat::from_str))
+        .flat_map(|stat_iter| stat_iter.map(TableStatArg::from_str))
         .filter_map(|res| res.ok())
         .collect();
 
     if table_stats.is_empty() {
-        table_stats = Stat::iter().collect();
+        use TableStatArg::{AutoHaines, Hdw, MaxHdw, MaxHdwTime};
+        table_stats = vec![Hdw, MaxHdw, MaxHdwTime, AutoHaines];
     }
 
-    let mut graph_stats: Vec<Stat> = matches
+    let mut graph_stats: Vec<GraphStatArg> = matches
         .values_of("graph-stats")
         .into_iter()
-        .flat_map(|stat_iter| stat_iter.map(Stat::from_str))
+        .flat_map(|stat_iter| stat_iter.map(GraphStatArg::from_str))
         .filter_map(|res| res.ok())
         .collect();
 
     if graph_stats.is_empty() {
-        graph_stats = Stat::iter().collect();
+        use GraphStatArg::{AutoHaines, Hdw};
+        graph_stats = vec![Hdw, AutoHaines];
     }
 
     let parse_date_string = |dt_str: &str| -> NaiveDateTime {
@@ -216,10 +239,24 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
         }
     };
 
-    let mode: Mode = matches
-        .value_of("mode")
-        .and_then(|m| Mode::from_str(m).ok())
-        .unwrap_or(Mode::ZeroZ);
+    let print: bool = {
+        let arg_val = matches.value_of("print").unwrap(); // Safe, this is a required argument.
+
+        arg_val == "Y" || arg_val == "y"
+    };
+
+    let save_dir: Option<PathBuf> = matches
+        .value_of("save-dir")
+        .map(str::to_owned)
+        .map(PathBuf::from);
+
+    save_dir.as_ref().and_then(|path| {
+        if !path.is_dir() {
+            bail(&format!("save-dir path {} does not exist.", path.display()));
+        } else {
+            Some(())
+        }
+    });
 
     Ok(CmdLineArgs {
         root,
@@ -228,8 +265,25 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
         init_time,
         table_stats,
         graph_stats,
-        mode,
+        print,
+        save_dir,
     })
+}
+
+fn calculate_stats(args: &CmdLineArgs, site: &str) -> Result<CalcStats, Error> {
+    // Create some data structure to return, later to be passed to print stats.
+
+    unimplemented!()
+}
+
+fn print_stats(args: &CmdLineArgs, site: &str, stats: &CalcStats) -> Result<(), Error> {
+    // Print the stats to the screen
+    unimplemented!()
+}
+
+fn save_stats(args: &CmdLineArgs, site: &str, stats: &CalcStats) -> Result<(), Error> {
+    // Print the stats to the screen
+    unimplemented!()
 }
 
 #[derive(Debug)]
@@ -238,25 +292,52 @@ struct CmdLineArgs {
     sites: Vec<String>,
     models: Vec<Model>,
     init_time: NaiveDateTime,
-    table_stats: Vec<Stat>,
-    graph_stats: Vec<Stat>,
-    mode: Mode,
+    table_stats: Vec<TableStatArg>,
+    graph_stats: Vec<GraphStatArg>,
+    print: bool,
+    save_dir: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter)]
-enum Stat {
+enum GraphStatArg {
     #[strum(serialize = "HDW")]
     Hdw,
     HainesLow,
     HainesMid,
     HainesHigh,
+    AutoHaines,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter)]
-enum Mode {
-    #[strum(serialize = "00Z")]
-    ZeroZ,
-    DailyMax,
+enum TableStatArg {
+    #[strum(serialize = "HDW")]
+    Hdw,
+    #[strum(serialize = "MaxHDW")]
+    MaxHdw,
+    #[strum(serialize = "MaxHDWTime")]
+    MaxHdwTime,
+    HainesLow,
+    MaxHainesLow,
+    MaxHainesLowTime,
+    HainesMid,
+    MaxHainesMid,
+    MaxHainesMidTime,
+    HainesHigh,
+    MaxHainesHigh,
+    MaxHainesHighTime,
+    AutoHaines,
+    MaxAutoHaines,
+    MaxAutoHainesTime,
+}
+
+#[derive(Debug)]
+struct CalcStats {
+    // TODO
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Stat {
+    // TODO
 }
 
 #[allow(dead_code)]
