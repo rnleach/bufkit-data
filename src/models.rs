@@ -9,20 +9,20 @@ use chrono::{Duration, NaiveDateTime};
 #[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter)]
 pub enum Model {
     #[strum(
-        serialize = "gfs",
+        to_string = "gfs",
         serialize = "gfs3",
         serialize = "GFS",
         serialize = "GFS3"
     )]
     GFS,
     #[strum(
-        serialize = "nam",
+        to_string = "nam",
         serialize = "namm",
         serialize = "NAM",
         serialize = "NAMM"
     )]
     NAM,
-    #[strum(serialize = "nam4km", serialize = "NAM4KM")]
+    #[strum(to_string = "nam4km", serialize = "NAM4KM")]
     NAM4KM,
 }
 

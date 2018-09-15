@@ -1,13 +1,23 @@
 //! firebuf - Calculate fire weather indicies from soundings in your Bufkit Archive.
 extern crate bufkit_data;
 extern crate chrono;
+extern crate clap;
 extern crate failure;
 extern crate sounding_analysis;
 extern crate sounding_bufkit;
+extern crate strum;
+#[macro_use]
+extern crate strum_macros;
 extern crate textplots;
 extern crate unicode_width;
 
-use failure::{Fail, Error};
+use bufkit_data::{Archive, BufkitDataErr, CommonCmdLineArgs, Model};
+use chrono::{NaiveDate, NaiveDateTime};
+use clap::Arg;
+use failure::{Error, Fail};
+use std::path::PathBuf;
+use std::str::FromStr;
+use strum::{AsStaticRef, IntoEnumIterator};
 use table_printer::TablePrinter;
 
 fn main() {
@@ -31,7 +41,223 @@ fn main() {
 }
 
 fn run() -> Result<(), Error> {
-    unimplemented!()
+    let args = parse_args()?;
+
+    println!("{:#?}", args);
+
+    Ok(())
+}
+
+fn parse_args() -> Result<CmdLineArgs, Error> {
+    let app = CommonCmdLineArgs::new_app("firebuf", "Fire weather analysis & summary.")
+        .arg(
+            Arg::with_name("sites")
+                .multiple(true)
+                .short("s")
+                .long("sites")
+                .takes_value(true)
+                .help("Site identifiers (e.g. kord, katl, smn)."),
+        ).arg(
+            Arg::with_name("models")
+                .multiple(true)
+                .short("m")
+                .long("models")
+                .takes_value(true)
+                .possible_values(
+                    &Model::iter()
+                        .map(|val| val.as_static())
+                        .collect::<Vec<&str>>(),
+                ).help("Allowable models for this operation/program.")
+                .long_help(concat!(
+                    "Allowable models for this operation/program.",
+                    " Default is to use all possible values."
+                )),
+        ).arg(
+            Arg::with_name("table-stats")
+                .multiple(true)
+                .short("t")
+                .long("table-stats")
+                .takes_value(true)
+                .possible_values(
+                    &Stat::iter()
+                        .map(|val| val.as_static())
+                        .collect::<Vec<&str>>(),
+                ).help("Which statistics to show in the table.")
+                .long_help("Which statistics to show in the table. Defaults to all possible."),
+        ).arg(
+            Arg::with_name("graph-stats")
+                .multiple(true)
+                .short("g")
+                .long("graph-stats")
+                .takes_value(true)
+                .possible_values(
+                    &Stat::iter()
+                        .map(|val| val.as_static())
+                        .collect::<Vec<&str>>(),
+                ).help("Which statistics to plot make a graph for.")
+                .long_help(concat!(
+                    "Which statistics to plot make a graph for.",
+                    " Defaults to all possible.",
+                    " All graphs plot all available data."
+                )),
+        ).arg(
+            Arg::with_name("mode")
+                .takes_value(true)
+                .multiple(false)
+                .possible_values(
+                    &Mode::iter()
+                        .map(|val| val.as_static())
+                        .collect::<Vec<&str>>(),
+                ).long("mode")
+                .help("Which daily value to put in the table.")
+                .default_value("00Z"),
+        ).arg(
+            Arg::with_name("init-time")
+                .long("init-time")
+                .short("i")
+                .takes_value(true)
+                .help("The model inititialization time. YYYY-MM-DD-HH")
+                .long_help(concat!(
+                    "The initialization time of the model run to analyze.",
+                    " Format is YYYY-MM-DD-HH. If not specified then the model run is assumed to",
+                    " be the last available run in the  archive."
+                )),
+        );
+
+    let (common_args, matches) = CommonCmdLineArgs::matches(app)?;
+
+    let bail = |msg: &str| -> ! {
+        println!("{}", msg);
+        ::std::process::exit(1);
+    };
+
+    let arch = Archive::connect(common_args.root())?;
+
+    let root = common_args.root().to_path_buf();
+    let mut sites: Vec<String> = matches
+        .values_of("sites")
+        .into_iter()
+        .flat_map(|site_iter| site_iter.map(|arg_val| arg_val.to_owned()))
+        .collect();
+
+    if sites.is_empty() {
+        sites = arch.get_sites()?.into_iter().map(|site| site.id).collect();
+    }
+
+    let mut models: Vec<Model> = matches
+        .values_of("models")
+        .into_iter()
+        .flat_map(|model_iter| model_iter.map(Model::from_str))
+        .filter_map(|res| res.ok())
+        .collect();
+
+    if models.is_empty() {
+        models = Model::iter().collect();
+    }
+
+    let mut table_stats: Vec<Stat> = matches
+        .values_of("table-stats")
+        .into_iter()
+        .flat_map(|stat_iter| stat_iter.map(Stat::from_str))
+        .filter_map(|res| res.ok())
+        .collect();
+
+    if table_stats.is_empty() {
+        table_stats = Stat::iter().collect();
+    }
+
+    let mut graph_stats: Vec<Stat> = matches
+        .values_of("graph-stats")
+        .into_iter()
+        .flat_map(|stat_iter| stat_iter.map(Stat::from_str))
+        .filter_map(|res| res.ok())
+        .collect();
+
+    if graph_stats.is_empty() {
+        graph_stats = Stat::iter().collect();
+    }
+
+    let parse_date_string = |dt_str: &str| -> NaiveDateTime {
+        let hour: u32 = match dt_str[11..].parse() {
+            Ok(hour) => hour,
+            Err(_) => bail(&format!("Could not parse date: {}", dt_str)),
+        };
+
+        let date = match NaiveDate::parse_from_str(&dt_str[..10], "%Y-%m-%d") {
+            Ok(date) => date,
+            Err(_) => bail(&format!("Could not parse date: {}", dt_str)),
+        };
+
+        date.and_hms(hour, 0, 0)
+    };
+
+    let init_time = if let Some(start_date) = matches.value_of("start") {
+        parse_date_string(start_date)
+    } else {
+        // Search and hunt for a combination that works!
+        let mut res = Err(BufkitDataErr::NotEnoughData);
+        for &model in &models {
+            for site in &sites {
+                res = arch.get_most_recent_valid_time(&site, model);
+                if res.is_ok() {
+                    break;
+                }
+            }
+        }
+        match res {
+            Ok(init_time) => init_time,
+            Err(_) => bail(&format!(
+                concat!(
+                    "Unable to find model run for any site-model ",
+                    "combination provided: {:#?} {:#?}"
+                ),
+                sites,
+                models
+            )),
+        }
+    };
+
+    let mode: Mode = matches
+        .value_of("mode")
+        .and_then(|m| Mode::from_str(m).ok())
+        .unwrap_or(Mode::ZeroZ);
+
+    Ok(CmdLineArgs {
+        root,
+        sites,
+        models,
+        init_time,
+        table_stats,
+        graph_stats,
+        mode,
+    })
+}
+
+#[derive(Debug)]
+struct CmdLineArgs {
+    root: PathBuf,
+    sites: Vec<String>,
+    models: Vec<Model>,
+    init_time: NaiveDateTime,
+    table_stats: Vec<Stat>,
+    graph_stats: Vec<Stat>,
+    mode: Mode,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter)]
+enum Stat {
+    #[strum(serialize = "HDW")]
+    Hdw,
+    HainesLow,
+    HainesMid,
+    HainesHigh,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter)]
+enum Mode {
+    #[strum(serialize = "00Z")]
+    ZeroZ,
+    DailyMax,
 }
 
 mod table_printer {
