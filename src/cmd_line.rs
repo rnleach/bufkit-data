@@ -26,6 +26,7 @@ impl<'a, 'b> CommonCmdLineArgs {
                     .short("r")
                     .long("root")
                     .takes_value(true)
+                    .global(true)
                     .help("Path to the archive.")
                     .long_help("Path to the archive. Defaults to '${HOME}/bufkit/'"),
             )
