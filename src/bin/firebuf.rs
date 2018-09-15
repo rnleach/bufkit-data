@@ -18,7 +18,6 @@ use failure::{Error, Fail};
 use std::path::PathBuf;
 use std::str::FromStr;
 use strum::{AsStaticRef, IntoEnumIterator};
-use table_printer::TablePrinter;
 
 fn main() {
     if let Err(ref e) = run() {
@@ -260,6 +259,7 @@ enum Mode {
     DailyMax,
 }
 
+#[allow(dead_code)]
 mod table_printer {
     use failure::Error;
     use std::fmt::{Display, Write};
