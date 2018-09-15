@@ -18,6 +18,8 @@ sounding-base = "0.7.1"
 sounding-bufkit = "0.8.1"
 strum = "0.10"
 strum_macros = "0.10"
+textplots = "0.3"
+unicode-width = "0.1.5"
 
 
 [dev-dependencies]
