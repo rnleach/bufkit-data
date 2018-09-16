@@ -102,7 +102,7 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
                 ).help("Which statistics to show in the table.")
                 .long_help(concat!(
                     "Which statistics to show in the table.",
-                    " Defaults to HDW,  MaxHDW, MaxHDWTime, and AutoHaines"
+                    " Defaults to HDW,  MaxHDW, and AutoHaines"
                 )),
         ).arg(
             Arg::with_name("graph-stats")
@@ -189,8 +189,8 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
         .collect();
 
     if table_stats.is_empty() {
-        use TableStatArg::{AutoHaines, Hdw, MaxHdw, MaxHdwTime};
-        table_stats = vec![Hdw, MaxHdw, MaxHdwTime, AutoHaines];
+        use TableStatArg::{AutoHaines, Hdw, MaxHdw};
+        table_stats = vec![Hdw, MaxHdw, AutoHaines];
     }
 
     let mut graph_stats: Vec<GraphStatArg> = matches
@@ -256,15 +256,20 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
     let mut to_return: CalcStats = CalcStats::new();
 
     for &model in args.models.iter() {
-        let mut model_stats = to_return.stats.entry(model).or_insert(ModelStats::new());
-
         let analysis = if let Some(ref init_time) = args.init_time {
-            arch.get_file(site, model, init_time)?
+            arch.get_file(site, model, init_time)
         } else {
-            arch.get_most_recent_file(site, model)?
+            arch.get_most_recent_file(site, model)
+        };
+        let analysis = match analysis {
+            Ok(analysis) => analysis,
+            Err(_) => continue,
         };
         let analysis = BufkitData::new(&analysis)?;
 
+        let mut model_stats = to_return.stats.entry(model).or_insert(ModelStats::new());
+
+        let mut curr_time: Option<NaiveDateTime> = None;
         for anal in analysis.into_iter() {
             let sounding = anal.sounding();
 
@@ -273,6 +278,11 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
             } else {
                 continue;
             };
+
+            if curr_time.is_none() {
+                model_stats.init_time = Some(valid_time);
+            }
+            curr_time = Some(valid_time);
 
             let cal_day = (valid_time - Duration::hours(12)).date(); // Daily stats from 12Z to 12Z
 
@@ -336,7 +346,6 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                     MaxHainesHigh => &sounding_analysis::haines_high,
                     AutoHaines => &sounding_analysis::haines,
                     MaxAutoHaines => &sounding_analysis::haines,
-                    _ => continue,
                 };
                 let stat = match stat_func(sounding) {
                     Ok(stat) => stat,
@@ -354,7 +363,6 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                     MaxHainesHigh => &max,
                     AutoHaines => &zero_z,
                     MaxAutoHaines => &max,
-                    _ => continue,
                 };
 
                 let mut day_entry = table_stats.entry(cal_day).or_insert((0.0, 12));
@@ -363,14 +371,90 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                 *day_entry = selector(*day_entry, (stat, hour));
             }
         }
+
+        model_stats.end_time = curr_time;
     }
 
     Ok(to_return)
 }
 
 fn print_stats(args: &CmdLineArgs, site: &str, stats: &CalcStats) -> Result<(), Error> {
-    // Print the stats to the screen
-    unimplemented!()
+    use table_printer::TablePrinter;
+
+    for model in args.models.iter() {
+        let stats = match stats.stats.get(model) {
+            Some(stats) => stats,
+            None => continue,
+        };
+
+        //
+        // Table
+        //
+        let table_stats = &stats.table_stats;
+        let vals = match table_stats.get(&args.table_stats[0]) {
+            Some(vals) => vals,
+            None => continue,
+        };
+
+        let mut days: Vec<NaiveDate> = vals.keys().cloned().collect();
+        days.sort();
+
+        let title = format!("Fire Indexes for {}.", site.to_uppercase());
+        let header = format!(
+            "{} data from {} to {}.",
+            model,
+            stats
+                .init_time
+                .map(|dt| dt.to_string())
+                .unwrap_or("unknown".to_owned()),
+            stats
+                .end_time
+                .map(|dt| dt.to_string())
+                .unwrap_or("unknown".to_owned())
+        );
+        let footer = concat!(
+            "For daily maximum values, first and last days may be partial. ",
+            "Days run from 12Z on the date listed until 12Z the next day."
+        ).to_owned();
+
+        let mut tp = TablePrinter::new()
+            .with_title(title)
+            .with_header(header)
+            .with_footer(footer)
+            .with_column("Date", &days);
+
+        for table_stat in args.table_stats.iter() {
+            use TableStatArg::*;
+
+            let vals = match table_stats.get(table_stat) {
+                Some(vals) => vals,
+                None => continue,
+            };
+
+            let mut days: Vec<NaiveDate> = vals.keys().cloned().collect();
+            days.sort();
+
+            let daily_stat_values = days.iter().map(|d| vals[d]);
+            let daily_stat_values: Vec<String> = match *table_stat {
+                Hdw | HainesLow | HainesMid | HainesHigh | AutoHaines => daily_stat_values
+                    .map(|(val, _)| format!("{:.0}", val))
+                    .collect(),
+                _ => daily_stat_values
+                    .map(|(val, hour)| format!("{:.0} ({:02}Z)", val, hour))
+                    .collect(),
+            };
+
+            tp = tp.with_column(table_stat.as_static(), &daily_stat_values);
+        }
+
+        tp.print()?;
+
+        //
+        // TODO MAKE GRAPHS
+        //
+    }
+
+    Ok(())
 }
 
 fn save_stats(args: &CmdLineArgs, site: &str, stats: &CalcStats) -> Result<(), Error> {
@@ -406,20 +490,14 @@ enum TableStatArg {
     Hdw,
     #[strum(serialize = "MaxHDW")]
     MaxHdw,
-    #[strum(serialize = "MaxHDWTime")]
-    MaxHdwTime,
     HainesLow,
     MaxHainesLow,
-    MaxHainesLowTime,
     HainesMid,
     MaxHainesMid,
-    MaxHainesMidTime,
     HainesHigh,
     MaxHainesHigh,
-    MaxHainesHighTime,
     AutoHaines,
     MaxAutoHaines,
-    MaxAutoHainesTime,
 }
 
 #[derive(Debug)]
@@ -439,6 +517,8 @@ impl CalcStats {
 struct ModelStats {
     graph_stats: HashMap<GraphStatArg, Vec<(NaiveDateTime, f64)>>,
     table_stats: HashMap<TableStatArg, HashMap<NaiveDate, (f64, u32)>>,
+    init_time: Option<NaiveDateTime>,
+    end_time: Option<NaiveDateTime>,
 }
 
 impl ModelStats {
@@ -446,6 +526,8 @@ impl ModelStats {
         ModelStats {
             graph_stats: HashMap::new(),
             table_stats: HashMap::new(),
+            init_time: None,
+            end_time: None,
         }
     }
 }
@@ -533,21 +615,23 @@ mod table_printer {
             //
             // Calculate widths
             //
-            let mut table_width = self
+            let title_width = self
                 .title
                 .as_ref()
-                .and_then(|title| Some(UnicodeWidthStr::width(title.as_str())))
+                .and_then(|title| Some(UnicodeWidthStr::width(title.as_str()) + 2))
                 .unwrap_or(0);
+
+            let mut table_width = title_width;
             let mut col_widths = vec![0; self.columns.len()];
 
             for (i, col_name) in self.column_names.iter().enumerate() {
-                let mut width = UnicodeWidthStr::width(col_name.as_str());
+                let mut width = UnicodeWidthStr::width(col_name.as_str()) + 2;
                 if col_widths[i] < width {
                     col_widths[i] = width;
                 }
 
                 for row in self.columns[i].iter() {
-                    width = UnicodeWidthStr::width(row.as_str());
+                    width = UnicodeWidthStr::width(row.as_str()) + 2;
                     if col_widths[i] < width {
                         col_widths[i] = width;
                     }
@@ -555,8 +639,22 @@ mod table_printer {
             }
 
             debug_assert!(self.columns.len() > 0, "Must add a column.");
-            let all_cols_width: usize =
-                col_widths.iter().map(|x| *x).sum::<usize>() + col_widths.len() - 1;
+            let mut all_cols_width: usize =
+                col_widths.iter().cloned().sum::<usize>() + col_widths.len() - 1;
+
+            //
+            // Widen columns until they add to the width of the table (for really long titles)
+            //
+            while all_cols_width < table_width {
+                let min = col_widths.iter().cloned().min().unwrap();
+                for width in &mut col_widths {
+                    if *width == min {
+                        *width += 1;
+                    }
+                }
+                all_cols_width = col_widths.iter().cloned().sum::<usize>() + col_widths.len() - 1;
+            }
+
             if all_cols_width > table_width {
                 table_width = all_cols_width;
             }
@@ -657,8 +755,9 @@ mod table_printer {
             for i in 0..self.column_names.len() {
                 write!(
                     &mut builder,
-                    "\u{2502}{0:^1$}",
-                    self.column_names[i], col_widths[i]
+                    "\u{2502} {0:^1$} ",
+                    self.column_names[i],
+                    col_widths[i] - 2
                 )?;
             }
             write!(&mut builder, "\u{2502}\n")?;
@@ -683,7 +782,7 @@ mod table_printer {
             for i in 0..num_rows {
                 for j in 0..self.columns.len() {
                     let val = self.columns[j].get(i).unwrap_or(&self.fill);
-                    write!(&mut builder, "\u{2502}{0:>1$}", val, col_widths[j])?;
+                    write!(&mut builder, "\u{2502} {0:>1$} ", val, col_widths[j] - 2)?;
                 }
                 write!(&mut builder, "\u{2502}\n")?;
             }
