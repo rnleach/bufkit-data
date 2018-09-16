@@ -6,7 +6,7 @@ use chrono::{Duration, NaiveDateTime};
 
 /// Models potentially stored in the archive.
 #[allow(missing_docs)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter, Hash)]
 pub enum Model {
     #[strum(
         to_string = "gfs",

@@ -4,6 +4,7 @@ extern crate chrono;
 extern crate clap;
 extern crate failure;
 extern crate sounding_analysis;
+extern crate sounding_base;
 extern crate sounding_bufkit;
 extern crate strum;
 #[macro_use]
@@ -11,10 +12,13 @@ extern crate strum_macros;
 extern crate textplots;
 extern crate unicode_width;
 
-use bufkit_data::{Archive, BufkitDataErr, CommonCmdLineArgs, Model};
-use chrono::{NaiveDate, NaiveDateTime};
+use bufkit_data::{Archive, CommonCmdLineArgs, Model};
+use chrono::{NaiveDate, NaiveDateTime, Duration, Timelike};
 use clap::Arg;
 use failure::{Error, Fail};
+use sounding_base::Sounding;
+use sounding_bufkit::BufkitData;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use strum::{AsStaticRef, IntoEnumIterator};
@@ -44,8 +48,10 @@ fn run() -> Result<(), Error> {
 
     println!("{:#?}", args);
 
+    let arch = &Archive::connect(&args.root)?;
+
     for site in args.sites.iter() {
-        let stats = &calculate_stats(args, site)?;
+        let stats = &calculate_stats(args, arch, site)?;
 
         if args.print {
             print_stats(args, site, stats)?;
@@ -213,31 +219,7 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
         date.and_hms(hour, 0, 0)
     };
 
-    let init_time = if let Some(start_date) = matches.value_of("start") {
-        parse_date_string(start_date)
-    } else {
-        // Search and hunt for a combination that works!
-        let mut res = Err(BufkitDataErr::NotEnoughData);
-        for &model in &models {
-            for site in &sites {
-                res = arch.get_most_recent_valid_time(&site, model);
-                if res.is_ok() {
-                    break;
-                }
-            }
-        }
-        match res {
-            Ok(init_time) => init_time,
-            Err(_) => bail(&format!(
-                concat!(
-                    "Unable to find model run for any site-model ",
-                    "combination provided: {:#?} {:#?}"
-                ),
-                sites,
-                models
-            )),
-        }
-    };
+    let init_time = matches.value_of("init-time").map(parse_date_string);
 
     let print: bool = {
         let arg_val = matches.value_of("print").unwrap(); // Safe, this is a required argument.
@@ -270,10 +252,116 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
     })
 }
 
-fn calculate_stats(args: &CmdLineArgs, site: &str) -> Result<CalcStats, Error> {
-    // Create some data structure to return, later to be passed to print stats.
+fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<CalcStats, Error> {
 
-    unimplemented!()
+    let mut to_return: CalcStats = CalcStats::new();
+
+    for &model in args.models.iter() {
+
+        let mut model_stats = to_return.stats.entry(model).or_insert(ModelStats::new());
+
+        let analysis = if let Some(ref init_time) = args.init_time {
+            arch.get_file(site, model, init_time)?
+        } else {
+            arch.get_most_recent_file(site, model)?
+        };
+        let analysis = BufkitData::new(&analysis)?;
+
+        for anal in analysis.into_iter() {
+            let sounding = anal.sounding();
+
+            let valid_time = if let Some(valid_time) = sounding.get_valid_time() {
+                valid_time
+            } else {
+                continue;
+            };
+
+            let cal_day = (valid_time - Duration::hours(12)).date(); // Daily stats from 12Z to 12Z
+        
+            // Build the graph stats
+            for &graph_stat in args.graph_stats.iter() {
+                use GraphStatArg::*;
+
+                let mut graph_stats = model_stats.graph_stats.entry(graph_stat).or_insert(Vec::new());
+
+                let stat = match graph_stat {
+                    Hdw => sounding_analysis::hot_dry_windy(sounding),
+                    HainesLow => sounding_analysis::haines_low(sounding),
+                    HainesMid => sounding_analysis::haines_mid(sounding),
+                    HainesHigh => sounding_analysis::haines_high(sounding),
+                    AutoHaines => sounding_analysis::haines(sounding),
+                };
+                let stat = match stat {
+                    Ok(stat) => stat,
+                    Err(_) => continue,
+                };
+
+                graph_stats.push((valid_time, stat));
+        }
+
+            // Build the daily stats
+            for &table_stat in args.table_stats.iter() {
+                use TableStatArg::*;
+
+                let zero_z = |old_val: (f64, u32), new_val: (f64, u32)|-> (f64, u32) {
+                    if valid_time.hour() == 0 {
+                        new_val
+                    } else {
+                        old_val
+                    }
+                };
+
+                let max = |old_val: (f64, u32), new_val: (f64, u32)|-> (f64, u32) {
+                    if new_val.0 > old_val.0 {
+                        new_val
+                    } else {
+                        old_val
+                    }
+                };
+
+                let mut table_stats = model_stats.table_stats.entry(table_stat).or_insert(HashMap::new());
+
+                let stat_func: &Fn(&Sounding) -> Result<f64, _> = match table_stat {
+                    Hdw => &sounding_analysis::hot_dry_windy,
+                    MaxHdw => &sounding_analysis::hot_dry_windy,
+                    HainesLow => &sounding_analysis::haines_low,
+                    MaxHainesLow => &sounding_analysis::haines_low,
+                    HainesMid => &sounding_analysis::haines_mid,
+                    MaxHainesMid => &sounding_analysis::haines_mid,
+                    HainesHigh => &sounding_analysis::haines_high,
+                    MaxHainesHigh => &sounding_analysis::haines_high,
+                    AutoHaines => &sounding_analysis::haines,
+                    MaxAutoHaines => &sounding_analysis::haines,
+                    _ => continue,
+                };
+                let stat = match stat_func(sounding) {
+                    Ok(stat) => stat,
+                    Err(_) => continue,
+                };
+
+                let selector: &Fn((f64, u32),(f64, u32)) -> (f64, u32) = match table_stat {
+                    Hdw => &zero_z,
+                    MaxHdw => &max,
+                    HainesLow => &zero_z,
+                    MaxHainesLow => &max,
+                    HainesMid => &zero_z,
+                    MaxHainesMid => &max,
+                    HainesHigh => &zero_z,
+                    MaxHainesHigh => &max,
+                    AutoHaines => &zero_z,
+                    MaxAutoHaines => &max,
+                    _ => continue,
+                };
+
+                let mut day_entry = table_stats.entry(cal_day).or_insert((0.0, 12));
+                let hour = valid_time.hour();
+
+                *day_entry = selector(*day_entry, (stat, hour));
+            }
+        }
+    }
+
+    Ok(to_return)
 }
 
 fn print_stats(args: &CmdLineArgs, site: &str, stats: &CalcStats) -> Result<(), Error> {
@@ -291,14 +379,14 @@ struct CmdLineArgs {
     root: PathBuf,
     sites: Vec<String>,
     models: Vec<Model>,
-    init_time: NaiveDateTime,
+    init_time: Option<NaiveDateTime>,
     table_stats: Vec<TableStatArg>,
     graph_stats: Vec<GraphStatArg>,
     print: bool,
     save_dir: Option<PathBuf>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter, Hash)]
 enum GraphStatArg {
     #[strum(serialize = "HDW")]
     Hdw,
@@ -308,7 +396,7 @@ enum GraphStatArg {
     AutoHaines,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter, Hash)]
 enum TableStatArg {
     #[strum(serialize = "HDW")]
     Hdw,
@@ -332,12 +420,25 @@ enum TableStatArg {
 
 #[derive(Debug)]
 struct CalcStats {
-    // TODO
+    stats: HashMap<Model, ModelStats>,
 }
 
-#[derive(Clone, Copy, Debug)]
-enum Stat {
-    // TODO
+impl CalcStats {
+    fn new()-> Self {
+        CalcStats { stats: HashMap::new() }
+    }
+}
+
+#[derive(Debug)]
+struct ModelStats {
+    graph_stats: HashMap<GraphStatArg, Vec<(NaiveDateTime, f64)>>,
+    table_stats: HashMap<TableStatArg, HashMap<NaiveDate, (f64, u32)>>,
+}
+
+impl ModelStats {
+    fn new() -> Self {
+        ModelStats {graph_stats: HashMap::new(), table_stats: HashMap::new() }
+    }
 }
 
 #[allow(dead_code)]
