@@ -13,7 +13,7 @@ extern crate textplots;
 extern crate unicode_width;
 
 use bufkit_data::{Archive, CommonCmdLineArgs, Model};
-use chrono::{NaiveDate, NaiveDateTime, Duration, Timelike};
+use chrono::{Duration, NaiveDate, NaiveDateTime, Timelike};
 use clap::Arg;
 use failure::{Error, Fail};
 use sounding_base::Sounding;
@@ -253,11 +253,9 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
 }
 
 fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<CalcStats, Error> {
-
     let mut to_return: CalcStats = CalcStats::new();
 
     for &model in args.models.iter() {
-
         let mut model_stats = to_return.stats.entry(model).or_insert(ModelStats::new());
 
         let analysis = if let Some(ref init_time) = args.init_time {
@@ -277,12 +275,15 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
             };
 
             let cal_day = (valid_time - Duration::hours(12)).date(); // Daily stats from 12Z to 12Z
-        
+
             // Build the graph stats
             for &graph_stat in args.graph_stats.iter() {
                 use GraphStatArg::*;
 
-                let mut graph_stats = model_stats.graph_stats.entry(graph_stat).or_insert(Vec::new());
+                let mut graph_stats = model_stats
+                    .graph_stats
+                    .entry(graph_stat)
+                    .or_insert(Vec::new());
 
                 let stat = match graph_stat {
                     Hdw => sounding_analysis::hot_dry_windy(sounding),
@@ -297,13 +298,13 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                 };
 
                 graph_stats.push((valid_time, stat));
-        }
+            }
 
             // Build the daily stats
             for &table_stat in args.table_stats.iter() {
                 use TableStatArg::*;
 
-                let zero_z = |old_val: (f64, u32), new_val: (f64, u32)|-> (f64, u32) {
+                let zero_z = |old_val: (f64, u32), new_val: (f64, u32)| -> (f64, u32) {
                     if valid_time.hour() == 0 {
                         new_val
                     } else {
@@ -311,7 +312,7 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                     }
                 };
 
-                let max = |old_val: (f64, u32), new_val: (f64, u32)|-> (f64, u32) {
+                let max = |old_val: (f64, u32), new_val: (f64, u32)| -> (f64, u32) {
                     if new_val.0 > old_val.0 {
                         new_val
                     } else {
@@ -319,7 +320,10 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                     }
                 };
 
-                let mut table_stats = model_stats.table_stats.entry(table_stat).or_insert(HashMap::new());
+                let mut table_stats = model_stats
+                    .table_stats
+                    .entry(table_stat)
+                    .or_insert(HashMap::new());
 
                 let stat_func: &Fn(&Sounding) -> Result<f64, _> = match table_stat {
                     Hdw => &sounding_analysis::hot_dry_windy,
@@ -339,7 +343,7 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                     Err(_) => continue,
                 };
 
-                let selector: &Fn((f64, u32),(f64, u32)) -> (f64, u32) = match table_stat {
+                let selector: &Fn((f64, u32), (f64, u32)) -> (f64, u32) = match table_stat {
                     Hdw => &zero_z,
                     MaxHdw => &max,
                     HainesLow => &zero_z,
@@ -424,8 +428,10 @@ struct CalcStats {
 }
 
 impl CalcStats {
-    fn new()-> Self {
-        CalcStats { stats: HashMap::new() }
+    fn new() -> Self {
+        CalcStats {
+            stats: HashMap::new(),
+        }
     }
 }
 
@@ -437,7 +443,10 @@ struct ModelStats {
 
 impl ModelStats {
     fn new() -> Self {
-        ModelStats {graph_stats: HashMap::new(), table_stats: HashMap::new() }
+        ModelStats {
+            graph_stats: HashMap::new(),
+            table_stats: HashMap::new(),
+        }
     }
 }
 
