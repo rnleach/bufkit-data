@@ -46,6 +46,7 @@ fn main() {
 fn run() -> Result<(), Error> {
     let args = &parse_args()?;
 
+    #[cfg(debug_assertions)]
     println!("{:#?}", args);
 
     let arch = &Archive::connect(&args.root)?;
@@ -157,7 +158,13 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
         ::std::process::exit(1);
     };
 
-    let arch = Archive::connect(common_args.root())?;
+    let arch = match Archive::connect(common_args.root()){
+        arch@Ok(_) => arch,
+        err@Err(_) => {
+            println!("Unable to connect to db, printing error and exiting.");
+            err
+        },
+    }?;
 
     let root = common_args.root().to_path_buf();
     let mut sites: Vec<String> = matches
@@ -168,6 +175,12 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
 
     if sites.is_empty() {
         sites = arch.get_sites()?.into_iter().map(|site| site.id).collect();
+    }
+
+    for site in sites.iter(){
+        if !arch.site_exists(site)? {
+            println!("Site {} not in the archive, skipping.", site);
+        }
     }
 
     let mut models: Vec<Model> = matches
