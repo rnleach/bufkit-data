@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use strum::{AsStaticRef, IntoEnumIterator};
+use textplots::{Chart, Plot, Shape};
 
 fn main() {
     if let Err(ref e) = run() {
@@ -103,7 +104,7 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
                 ).help("Which statistics to show in the table.")
                 .long_help(concat!(
                     "Which statistics to show in the table.",
-                    " Defaults to HDW,  MaxHDW, and AutoHaines"
+                    " Defaults to HDW,  MaxHDW, HainesLow, HainesMid, and HainesHigh"
                 )),
         ).arg(
             Arg::with_name("graph-stats")
@@ -118,7 +119,7 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
                 ).help("Which statistics to plot make a graph for.")
                 .long_help(concat!(
                     "Which statistics to plot a graph for.",
-                    " Defaults to HDW and AutoHaines.",
+                    " Defaults to HDW.",
                     " All graphs plot all available data, but each model is on an individual axis."
                 )),
         ).arg(
@@ -139,7 +140,8 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
                 .help("Directory to save .csv files to.")
                 .long_help(concat!(
                     "Directory to save .csv files to. If this is specified then a file 'site.csv'",
-                    " is created for each site in that directory with data for all models."
+                    " is created for each site in that directory with data for all models and",
+                    " and all statistics."
                 )),
         ).arg(
             Arg::with_name("print")
@@ -158,12 +160,12 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
         ::std::process::exit(1);
     };
 
-    let arch = match Archive::connect(common_args.root()){
-        arch@Ok(_) => arch,
-        err@Err(_) => {
+    let arch = match Archive::connect(common_args.root()) {
+        arch @ Ok(_) => arch,
+        err @ Err(_) => {
             println!("Unable to connect to db, printing error and exiting.");
             err
-        },
+        }
     }?;
 
     let root = common_args.root().to_path_buf();
@@ -177,7 +179,7 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
         sites = arch.get_sites()?.into_iter().map(|site| site.id).collect();
     }
 
-    for site in sites.iter(){
+    for site in sites.iter() {
         if !arch.site_exists(site)? {
             println!("Site {} not in the archive, skipping.", site);
         }
@@ -202,8 +204,8 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
         .collect();
 
     if table_stats.is_empty() {
-        use TableStatArg::{AutoHaines, Hdw, MaxHdw};
-        table_stats = vec![Hdw, MaxHdw, AutoHaines];
+        use TableStatArg::{HainesHigh, HainesLow, HainesMid, Hdw, MaxHdw};
+        table_stats = vec![Hdw, MaxHdw, HainesLow, HainesMid, HainesHigh];
     }
 
     let mut graph_stats: Vec<GraphStatArg> = matches
@@ -214,8 +216,8 @@ fn parse_args() -> Result<CmdLineArgs, Error> {
         .collect();
 
     if graph_stats.is_empty() {
-        use GraphStatArg::{AutoHaines, Hdw};
-        graph_stats = vec![Hdw, AutoHaines];
+        use GraphStatArg::Hdw;
+        graph_stats = vec![Hdw];
     }
 
     let parse_date_string = |dt_str: &str| -> NaiveDateTime {
@@ -314,6 +316,7 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                     HainesMid => sounding_analysis::haines_mid(sounding),
                     HainesHigh => sounding_analysis::haines_high(sounding),
                     AutoHaines => sounding_analysis::haines(sounding),
+                    None => continue,
                 };
                 let stat = match stat {
                     Ok(stat) => stat,
@@ -359,6 +362,7 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                     MaxHainesHigh => &sounding_analysis::haines_high,
                     AutoHaines => &sounding_analysis::haines,
                     MaxAutoHaines => &sounding_analysis::haines,
+                    None => continue,
                 };
                 let stat = match stat_func(sounding) {
                     Ok(stat) => stat,
@@ -376,6 +380,7 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                     MaxHainesHigh => &max,
                     AutoHaines => &zero_z,
                     MaxAutoHaines => &max,
+                    None => unreachable!(),
                 };
 
                 let mut day_entry = table_stats.entry(cal_day).or_insert((0.0, 12));
@@ -403,43 +408,13 @@ fn print_stats(args: &CmdLineArgs, site: &str, stats: &CalcStats) -> Result<(), 
         //
         // Table
         //
-        let table_stats = &stats.table_stats;
-        let vals = match table_stats.get(&args.table_stats[0]) {
-            Some(vals) => vals,
-            None => continue,
-        };
-
-        let mut days: Vec<NaiveDate> = vals.keys().cloned().collect();
-        days.sort();
-
-        let title = format!("Fire Indexes for {}.", site.to_uppercase());
-        let header = format!(
-            "{} data from {} to {}.",
-            model,
-            stats
-                .init_time
-                .map(|dt| dt.to_string())
-                .unwrap_or("unknown".to_owned()),
-            stats
-                .end_time
-                .map(|dt| dt.to_string())
-                .unwrap_or("unknown".to_owned())
-        );
-        let footer = concat!(
-            "For daily maximum values, first and last days may be partial. ",
-            "Days run from 12Z on the date listed until 12Z the next day."
-        ).to_owned();
-
-        let mut tp = TablePrinter::new()
-            .with_title(title)
-            .with_header(header)
-            .with_footer(footer)
-            .with_column("Date", &days);
-
-        for table_stat in args.table_stats.iter() {
-            use TableStatArg::*;
-
-            let vals = match table_stats.get(table_stat) {
+        if args
+            .table_stats
+            .iter()
+            .all(|&stat| stat != TableStatArg::None)
+        {
+            let table_stats = &stats.table_stats;
+            let vals = match table_stats.get(&args.table_stats[0]) {
                 Some(vals) => vals,
                 None => continue,
             };
@@ -447,23 +422,113 @@ fn print_stats(args: &CmdLineArgs, site: &str, stats: &CalcStats) -> Result<(), 
             let mut days: Vec<NaiveDate> = vals.keys().cloned().collect();
             days.sort();
 
-            let daily_stat_values = days.iter().map(|d| vals[d]);
-            let daily_stat_values: Vec<String> = match *table_stat {
-                Hdw | HainesLow | HainesMid | HainesHigh | AutoHaines => daily_stat_values
-                    .map(|(val, _)| format!("{:.0}", val))
-                    .collect(),
-                _ => daily_stat_values
-                    .map(|(val, hour)| format!("{:.0} ({:02}Z)", val, hour))
-                    .collect(),
-            };
+            let title = format!("Fire Indexes for {}.", site.to_uppercase());
+            let header = format!(
+                "{} data from {} to {}.",
+                model,
+                stats
+                    .init_time
+                    .map(|dt| dt.to_string())
+                    .unwrap_or("unknown".to_owned()),
+                stats
+                    .end_time
+                    .map(|dt| dt.to_string())
+                    .unwrap_or("unknown".to_owned())
+            );
+            let footer = concat!(
+                "For daily maximum values, first and last days may be partial. ",
+                "Days run from 12Z on the date listed until 12Z the next day."
+            ).to_owned();
 
-            tp = tp.with_column(table_stat.as_static(), &daily_stat_values);
+            let mut tp = TablePrinter::new()
+                .with_title(title)
+                .with_header(header)
+                .with_footer(footer)
+                .with_column("Date", &days);
+
+            for table_stat in args.table_stats.iter() {
+                use TableStatArg::*;
+
+                let vals = match table_stats.get(table_stat) {
+                    Some(vals) => vals,
+                    Option::None => continue,
+                };
+
+                let mut days: Vec<NaiveDate> = vals.keys().cloned().collect();
+                days.sort();
+
+                let daily_stat_values = days.iter().map(|d| vals[d]);
+                let daily_stat_values: Vec<String> = match *table_stat {
+                    Hdw | HainesLow | HainesMid | HainesHigh | AutoHaines => daily_stat_values
+                        .map(|(val, _)| format!("{:.0}", val))
+                        .collect(),
+                    _ => daily_stat_values
+                        .map(|(val, hour)| format!("{:.0} ({:02}Z)", val, hour))
+                        .collect(),
+                };
+
+                tp = tp.with_column(table_stat.as_static(), &daily_stat_values);
+            }
+
+            tp.print_with_min_width(78)?;
         }
 
-        tp.print()?;
+        //
+        // END TABLE
+        //
 
         //
-        // TODO MAKE GRAPHS
+        // GRAPHS
+        //
+        let graph_stats = &stats.graph_stats;
+        for graph_stat in args.graph_stats.iter() {
+            let vals = match graph_stats.get(graph_stat) {
+                Some(vals) => vals,
+                None => continue,
+            };
+            let base_time = if let Some(first) = vals.get(0) {
+                first.0
+            } else {
+                continue;
+            };
+
+            let base_hour = if base_time.hour() == 0 {
+                24f32
+            } else {
+                base_time.hour() as f32
+            };
+
+            let values_start = [
+                (0.0, graph_stat.default_max_y()),
+                (1.0 / 24.0, graph_stat.default_min_y()),
+                ((base_hour - 1.0) / 24.0, graph_stat.default_min_y()),
+            ];
+            let values_iter = vals.iter().map(|&(v_time, val)| {
+                (
+                    ((v_time - base_time).num_hours() as f32 + base_hour) / 24.0,
+                    val as f32,
+                )
+            });
+
+            let values_plot: Vec<(f32, f32)> =
+                values_start.iter().cloned().chain(values_iter).collect();
+
+            println!(
+                "{:^78}",
+                format!(
+                    "{} {} for {}",
+                    model,
+                    graph_stat.as_static(),
+                    site.to_uppercase()
+                )
+            );
+
+            Chart::new(160, 45, 0.0, 9.0)
+                .lineplot(Shape::Steps(values_plot.as_slice()))
+                .nice();
+        }
+        //
+        // END GRAPHS
         //
     }
 
@@ -495,6 +560,24 @@ enum GraphStatArg {
     HainesMid,
     HainesHigh,
     AutoHaines,
+    None,
+}
+
+impl GraphStatArg {
+    fn default_min_y(self) -> f32 {
+        match self {
+            _ => 0.0,
+        }
+    }
+
+    fn default_max_y(self) -> f32 {
+        use GraphStatArg::*;
+
+        match self {
+            Hdw => 500.0,
+            _ => 6.0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter, Hash)]
@@ -511,6 +594,7 @@ enum TableStatArg {
     MaxHainesHigh,
     AutoHaines,
     MaxAutoHaines,
+    None,
 }
 
 #[derive(Debug)]
@@ -625,6 +709,10 @@ mod table_printer {
         }
 
         pub fn print(self) -> Result<(), Error> {
+            self.print_with_min_width(0)
+        }
+
+        pub fn print_with_min_width(self, min_width: usize) -> Result<(), Error> {
             //
             // Calculate widths
             //
@@ -634,7 +722,11 @@ mod table_printer {
                 .and_then(|title| Some(UnicodeWidthStr::width(title.as_str()) + 2))
                 .unwrap_or(0);
 
-            let mut table_width = title_width;
+            let mut table_width = if min_width > title_width {
+                min_width
+            } else {
+                title_width
+            };
             let mut col_widths = vec![0; self.columns.len()];
 
             for (i, col_name) in self.column_names.iter().enumerate() {
