@@ -320,7 +320,7 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                 };
                 let stat = match stat {
                     Ok(stat) => stat,
-                    Err(_) => continue,
+                    Err(_) => ::std::f64::NAN,
                 };
 
                 graph_stats.push((valid_time, stat));
@@ -339,7 +339,9 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                 };
 
                 let max = |old_val: (f64, u32), new_val: (f64, u32)| -> (f64, u32) {
-                    if new_val.0 > old_val.0 {
+                    if old_val.0.is_nan() && !new_val.0.is_nan() {
+                        new_val
+                    } else if new_val.0 > old_val.0 {
                         new_val
                     } else {
                         old_val
@@ -366,7 +368,7 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                 };
                 let stat = match stat_func(sounding) {
                     Ok(stat) => stat,
-                    Err(_) => continue,
+                    Err(_) => ::std::f64::NAN,
                 };
 
                 let selector: &Fn((f64, u32), (f64, u32)) -> (f64, u32) = match table_stat {
@@ -383,7 +385,7 @@ fn calculate_stats(args: &CmdLineArgs, arch: &Archive, site: &str) -> Result<Cal
                     None => unreachable!(),
                 };
 
-                let mut day_entry = table_stats.entry(cal_day).or_insert((0.0, 12));
+                let mut day_entry = table_stats.entry(cal_day).or_insert((::std::f64::NAN, 12));
                 let hour = valid_time.hour();
 
                 *day_entry = selector(*day_entry, (stat, hour));
@@ -461,10 +463,22 @@ fn print_stats(args: &CmdLineArgs, site: &str, stats: &CalcStats) -> Result<(), 
                 let daily_stat_values: Vec<String> = match *table_stat {
                     Hdw | HainesLow | HainesMid | HainesHigh | AutoHaines => daily_stat_values
                         .map(|(val, _)| format!("{:.0}", val))
-                        .collect(),
+                        .map(|val| {
+                            if val.contains("NaN") {
+                                "".to_owned()
+                            } else {
+                                val
+                            }
+                        }).collect(),
                     _ => daily_stat_values
                         .map(|(val, hour)| format!("{:.0} ({:02}Z)", val, hour))
-                        .collect(),
+                        .map(|val| {
+                            if val.contains("NaN") {
+                                "".to_owned()
+                            } else {
+                                val
+                            }
+                        }).collect(),
                 };
 
                 tp = tp.with_column(table_stat.as_static(), &daily_stat_values);
