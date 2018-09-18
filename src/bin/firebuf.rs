@@ -588,7 +588,7 @@ impl GraphStatArg {
         use GraphStatArg::*;
 
         match self {
-            Hdw => 500.0,
+            Hdw => 700.0,
             _ => 6.0,
         }
     }
