@@ -221,7 +221,7 @@ fn sites_list(
     // Filter for missing any data
     //
     let missing_any = &|site: &Site| -> bool {
-        site.name.is_none() || site.state.is_none() || site.notes.is_none()
+        site.name.is_none() || site.state.is_none()
     };
     let missing_any_pred: &Fn(&Site) -> bool = if sub_sub_args.is_present("missing-data") {
         missing_any
