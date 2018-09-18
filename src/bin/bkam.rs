@@ -71,12 +71,16 @@ fn run() -> Result<(), Error> {
                             Arg::with_name("auto-download")
                                 .long("auto-download")
                                 .short("a")
-                                .help("Only list sites that are automatically downloaded by bufdn."),
+                                .help(
+                                    "Only list sites that are automatically downloaded by bufdn.",
+                                ),
                         ).arg(
                             Arg::with_name("no-auto-download")
                                 .long("no-auto-download")
                                 .short("n")
-                                .help("Only list sites that are automatically downloaded by bufdn."),
+                                .help(
+                                    "Only list sites that are automatically downloaded by bufdn.",
+                                ),
                         ),
                 ).subcommand(
                     SubCommand::with_name("modify")
@@ -107,7 +111,7 @@ fn run() -> Result<(), Error> {
                                 .long("auto-download")
                                 .help("Set whether or not to automatically download this site.")
                                 .possible_values(&["Yes", "yes", "no", "No"])
-                                .takes_value(true)
+                                .takes_value(true),
                         ),
                 ).subcommand(
                     SubCommand::with_name("inv")
@@ -236,9 +240,7 @@ fn sites_list(
     //
     // Filter for missing any data
     //
-    let missing_any = &|site: &Site| -> bool {
-        site.name.is_none() || site.state.is_none()
-    };
+    let missing_any = &|site: &Site| -> bool { site.name.is_none() || site.state.is_none() };
     let missing_any_pred: &Fn(&Site) -> bool = if sub_sub_args.is_present("missing-data") {
         missing_any
     } else {
@@ -262,7 +264,7 @@ fn sites_list(
     let no_auto_download = &|site: &Site| -> bool { !site.auto_download };
     let auto_download_pred: &Fn(&Site) -> bool = if sub_sub_args.is_present("auto-download") {
         auto_download
-    } else if sub_sub_args.is_present("no-auto-download"){
+    } else if sub_sub_args.is_present("no-auto-download") {
         no_auto_download
     } else {
         pass
@@ -284,7 +286,10 @@ fn sites_list(
     if sites_iter().count() == 0 {
         println!("No sites matched criteria.");
     } else {
-        println!("{:^4} {:^5} {:^20} {:^13} : {}", "ID", "STATE", "NAME", "Auto Download", "NOTES");
+        println!(
+            "{:^4} {:^5} {:^20} {:^13} : {}",
+            "ID", "STATE", "NAME", "Auto Download", "NOTES"
+        );
     }
 
     let blank = "-".to_owned();
@@ -294,12 +299,11 @@ fn sites_list(
         let state = site.state.map(|st| st.as_static()).unwrap_or(&"-");
         let name = site.name.as_ref().unwrap_or(&blank);
         let notes = site.notes.as_ref().unwrap_or(&blank);
-        let auto_dl = if site.auto_download {
-                "Yes"
-            } else {
-                "No"
-            };
-        println!("{:<4} {:^5} {:<20} {:>13} : {:<}", id, state, name, auto_dl, notes);
+        let auto_dl = if site.auto_download { "Yes" } else { "No" };
+        println!(
+            "{:<4} {:^5} {:<20} {:>13} : {:<}",
+            id, state, name, auto_dl, notes
+        );
     }
 
     Ok(())
@@ -325,7 +329,7 @@ fn sites_modify(
 
     if let Some(dl) = sub_sub_args.value_of("auto-download") {
         match dl {
-            "Yes"|"yes" => site.auto_download = true,
+            "Yes" | "yes" => site.auto_download = true,
             "No" | "no" => site.auto_download = false,
             _ => unreachable!(),
         }
@@ -372,11 +376,7 @@ fn sites_inventory(
                 println!("{} -> {} : {:6}", start, end, cycles);
             }
         }
-        let dl = if inv.auto_download {
-            ""
-        } else {
-            " NOT"
-        };
+        let dl = if inv.auto_download { "" } else { " NOT" };
 
         println!("This site is{} automatically downloaded.", dl);
     }

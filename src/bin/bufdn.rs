@@ -13,7 +13,7 @@ extern crate reqwest;
 extern crate strum;
 
 use bufkit_data::{Archive, BufkitDataErr, CommonCmdLineArgs, Model};
-use chrono::{Datelike, Duration, NaiveDateTime, Timelike, Utc, NaiveDate};
+use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike, Utc};
 use clap::{Arg, ArgMatches};
 use crossbeam_channel as channel;
 use failure::{Error, Fail};
@@ -89,7 +89,8 @@ fn run() -> Result<(), Error> {
                     "The number of days back to consider. Cannot use --start or --end with this."
                 )),
         ).arg(
-            Arg::with_name("start").long("start")
+            Arg::with_name("start")
+                .long("start")
                 .takes_value(true)
                 .help("The starting model inititialization time. YYYY-MM-DD-HH")
                 .long_help(concat!(
@@ -107,7 +108,6 @@ fn run() -> Result<(), Error> {
                     "The initialization time of the last model run to download.",
                     " Format is YYYY-MM-DD-HH. This requires the --start option too."
                 )),
-        
         );
 
     let (common_args, matches) = CommonCmdLineArgs::matches(app)?;
@@ -261,7 +261,12 @@ fn build_download_list<'a>(
         .unwrap_or(DEFAULT_DAYS_BACK);
 
     if sites.is_empty() {
-        sites = arch.get_sites()?.into_iter().filter(|s| s.auto_download).map(|site| site.id).collect();
+        sites = arch
+            .get_sites()?
+            .into_iter()
+            .filter(|s| s.auto_download)
+            .map(|site| site.id)
+            .collect();
     }
 
     if models.is_empty() {
@@ -287,7 +292,7 @@ fn build_download_list<'a>(
 
     if let Some(start_date) = arg_matches.value_of("start") {
         start = parse_date_string(start_date);
-    } 
+    }
 
     if let Some(end_date) = arg_matches.value_of("end") {
         end = parse_date_string(end_date);

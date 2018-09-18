@@ -103,7 +103,7 @@ mod unit {
             name: Some("tv station".to_owned()),
             state: Some(StateProv::VI),
             notes: None,
-            auto_download: true
+            auto_download: true,
         };
 
         assert!(!complete_site.incomplete());

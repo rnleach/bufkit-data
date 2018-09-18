@@ -104,7 +104,7 @@ impl Archive {
                     name,
                     notes,
                     state,
-                    auto_download
+                    auto_download,
                 }
             })?.map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
