@@ -6,6 +6,7 @@ pub struct Site {
     pub name: Option<String>,
     pub notes: Option<String>,
     pub state: Option<StateProv>,
+    pub auto_download: bool,
 }
 
 impl Site {
@@ -94,6 +95,7 @@ mod unit {
             name: Some("tv station".to_owned()),
             state: Some(StateProv::VI),
             notes: Some("".to_owned()),
+            auto_download: false,
         };
 
         let incomplete_site = Site {
@@ -101,6 +103,7 @@ mod unit {
             name: Some("tv station".to_owned()),
             state: Some(StateProv::VI),
             notes: None,
+            auto_download: true
         };
 
         assert!(!complete_site.incomplete());

@@ -13,7 +13,7 @@ extern crate reqwest;
 extern crate strum;
 
 use bufkit_data::{Archive, BufkitDataErr, CommonCmdLineArgs, Model};
-use chrono::{Datelike, Duration, NaiveDateTime, Timelike, Utc};
+use chrono::{Datelike, Duration, NaiveDateTime, Timelike, Utc, NaiveDate};
 use clap::{Arg, ArgMatches};
 use crossbeam_channel as channel;
 use failure::{Error, Fail};
@@ -24,7 +24,7 @@ use std::thread::{spawn, JoinHandle};
 use strum::IntoEnumIterator;
 
 static HOST_URL: &str = "http://mtarchive.geol.iastate.edu/";
-const DEFAULT_DAYS_BACK: &str = "2";
+const DEFAULT_DAYS_BACK: i64 = 2;
 
 fn main() {
     if let Err(ref e) = run() {
@@ -64,7 +64,12 @@ fn run() -> Result<(), Error> {
                 .short("s")
                 .long("sites")
                 .takes_value(true)
-                .help("Site identifiers (e.g. kord, katl, smn)."),
+                .help("Site identifiers (e.g. kord, katl, smn).")
+                .long_help(concat!(
+                    "Site identifiers (e.g. kord, katl, smn). ",
+                    "If not specified, it will look in the database for sites configured for auto ",
+                    "download and use all of them."
+                )),
         ).arg(
             Arg::with_name("models")
                 .multiple(true)
@@ -78,9 +83,31 @@ fn run() -> Result<(), Error> {
                 .short("d")
                 .long("days-back")
                 .takes_value(true)
-                .default_value(DEFAULT_DAYS_BACK)
+                .conflicts_with_all(&["start", "end"])
                 .help("Number of days back to consider.")
-                .long_help("The number of days back to consider."),
+                .long_help(concat!(
+                    "The number of days back to consider. Cannot use --start or --end with this."
+                )),
+        ).arg(
+            Arg::with_name("start").long("start")
+                .takes_value(true)
+                .help("The starting model inititialization time. YYYY-MM-DD-HH")
+                .long_help(concat!(
+                    "The initialization time of the first model run to download.",
+                    " Format is YYYY-MM-DD-HH. If the --end argument is not specified",
+                    " then the end time is assumed to be now."
+                )),
+        ).arg(
+            Arg::with_name("end")
+                .long("end")
+                .takes_value(true)
+                .requires("start")
+                .help("The last model inititialization time. YYYY-MM-DD-HH")
+                .long_help(concat!(
+                    "The initialization time of the last model run to download.",
+                    " Format is YYYY-MM-DD-HH. This requires the --start option too."
+                )),
+        
         );
 
     let (common_args, matches) = CommonCmdLineArgs::matches(app)?;
@@ -210,6 +237,11 @@ fn build_download_list<'a>(
     arg_matches: &'a ArgMatches,
     arch: &Archive,
 ) -> Result<impl Iterator<Item = (String, Model, NaiveDateTime)> + 'a, BufkitDataErr> {
+    let bail = |msg: &str| -> ! {
+        println!("{}", msg);
+        ::std::process::exit(1);
+    };
+
     let mut sites: Vec<String> = arg_matches
         .values_of("sites")
         .into_iter()
@@ -226,18 +258,40 @@ fn build_download_list<'a>(
     let days_back = arg_matches
         .value_of("days-back")
         .and_then(|val| val.parse::<i64>().ok())
-        .expect("Invalid days-back, not parseable as an integer.");
+        .unwrap_or(DEFAULT_DAYS_BACK);
 
     if sites.is_empty() {
-        sites = arch.get_sites()?.into_iter().map(|site| site.id).collect();
+        sites = arch.get_sites()?.into_iter().filter(|s| s.auto_download).map(|site| site.id).collect();
     }
 
     if models.is_empty() {
         models = Model::iter().collect();
     }
 
-    let end = Utc::now().naive_utc() - Duration::hours(2);
-    let start = Utc::now().naive_utc() - Duration::days(days_back);
+    let mut end = Utc::now().naive_utc() - Duration::hours(2);
+    let mut start = Utc::now().naive_utc() - Duration::days(days_back);
+
+    let parse_date_string = |dt_str: &str| -> NaiveDateTime {
+        let hour: u32 = match dt_str[11..].parse() {
+            Ok(hour) => hour,
+            Err(_) => bail(&format!("Could not parse date: {}", dt_str)),
+        };
+
+        let date = match NaiveDate::parse_from_str(&dt_str[..10], "%Y-%m-%d") {
+            Ok(date) => date,
+            Err(_) => bail(&format!("Could not parse date: {}", dt_str)),
+        };
+
+        date.and_hms(hour, 0, 0)
+    };
+
+    if let Some(start_date) = arg_matches.value_of("start") {
+        start = parse_date_string(start_date);
+    } 
+
+    if let Some(end_date) = arg_matches.value_of("end") {
+        end = parse_date_string(end_date);
+    }
 
     Ok(iproduct!(sites, models).flat_map(move |(site, model)| {
         model

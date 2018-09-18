@@ -56,10 +56,11 @@ impl Archive {
 
         db_conn.execute(
             "CREATE TABLE sites (
-                site        TEXT PRIMARY KEY,
-                state       TEXT DEFAULT NULL,
-                name        TEXT DEFAULT NULL,
-                notes       TEXT DEFAULT NULL
+                site          TEXT PRIMARY KEY,
+                state         TEXT DEFAULT NULL,
+                name          TEXT DEFAULT NULL,
+                notes         TEXT DEFAULT NULL,
+                auto_download INT DEFAULT 0
             )",
             &[],
         )?;
@@ -85,13 +86,14 @@ impl Archive {
     pub fn get_sites(&self) -> Result<Vec<Site>, BufkitDataErr> {
         let mut stmt = self
             .db_conn
-            .prepare("SELECT site,name,state,notes FROM sites")?;
+            .prepare("SELECT site,name,state,notes,auto_download FROM sites")?;
 
         let vals: Result<Vec<Site>, BufkitDataErr> = stmt
             .query_map(&[], |row| {
                 let id = row.get(0);
                 let name = row.get(1);
                 let notes = row.get(3);
+                let auto_download = row.get(4);
                 let state: Option<StateProv> = row
                     .get_checked::<_, String>(2)
                     .ok()
@@ -102,6 +104,7 @@ impl Archive {
                     name,
                     notes,
                     state,
+                    auto_download
                 }
             })?.map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
@@ -113,7 +116,7 @@ impl Archive {
     pub fn get_site_info(&self, site_id: &str) -> Result<Site, BufkitDataErr> {
         self.db_conn.query_row_and_then(
             "
-                SELECT site,name,state,notes 
+                SELECT site,name,state,notes,auto_download
                 FROM sites
                 WHERE site = ?1
             ",
@@ -122,6 +125,7 @@ impl Archive {
                 let id = row.get(0);
                 let name = row.get(1);
                 let notes = row.get(3);
+                let auto_download = row.get(4);
                 let state: Option<StateProv> = row
                     .get_checked::<_, String>(2)
                     .ok()
@@ -132,6 +136,7 @@ impl Archive {
                     name,
                     notes,
                     state,
+                    auto_download,
                 })
             },
         )
@@ -142,8 +147,8 @@ impl Archive {
         self.db_conn.execute(
             "
                 UPDATE sites 
-                SET (state, name, notes)
-                = (?2, ?3, ?4)
+                SET (state, name, notes, auto_download)
+                = (?2, ?3, ?4, ?5)
                 WHERE site = ?1
             ",
             &[
@@ -151,6 +156,7 @@ impl Archive {
                 &site.state.map(|state_prov| state_prov.as_static()),
                 &site.name,
                 &site.notes,
+                &site.auto_download,
             ],
         )?;
 
@@ -160,13 +166,14 @@ impl Archive {
     /// Add a site to the list of sites.
     pub fn add_site(&self, site: &Site) -> Result<(), BufkitDataErr> {
         self.db_conn.execute(
-            "INSERT INTO sites (site, state, name, notes)
-                  VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO sites (site, state, name, notes, auto_download)
+                  VALUES (?1, ?2, ?3, ?4, ?5)",
             &[
                 &site.id.to_uppercase(),
                 &site.state.map(|state_prov| state_prov.as_static()),
                 &site.name,
                 &site.notes,
+                &site.auto_download,
             ],
         )?;
 
@@ -198,6 +205,7 @@ impl Archive {
                 name: None,
                 notes: None,
                 state: None,
+                auto_download: false,
             })?;
         }
 
@@ -333,7 +341,9 @@ impl Archive {
         let init_times: Vec<NaiveDateTime> =
             init_times?.into_iter().filter_map(|res| res.ok()).collect();
 
-        Inventory::new(init_times, model)
+        let site = self.get_site_info(site_id)?;
+
+        Inventory::new(init_times, model, site)
     }
 }
 
@@ -448,18 +458,21 @@ mod unit {
                 name: Some("Chicago/O'Hare".to_owned()),
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
+                auto_download: false,
             },
             Site {
                 id: "ksea".to_uppercase(),
                 name: Some("Seattle".to_owned()),
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
+                auto_download: true,
             },
             Site {
                 id: "kmso".to_uppercase(),
                 name: Some("Missoula".to_owned()),
                 notes: Some("In a valley.".to_owned()),
                 state: None,
+                auto_download: true,
             },
         ];
 
@@ -490,18 +503,21 @@ mod unit {
                 name: Some("Chicago/O'Hare".to_owned()),
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
+                auto_download: false,
             },
             Site {
                 id: "ksea".to_uppercase(),
                 name: Some("Seattle".to_owned()),
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
+                auto_download: true,
             },
             Site {
                 id: "kmso".to_uppercase(),
                 name: Some("Missoula".to_owned()),
                 notes: Some("In a valley.".to_owned()),
                 state: None,
+                auto_download: true,
             },
         ];
 
@@ -523,18 +539,21 @@ mod unit {
                 name: Some("Chicago/O'Hare".to_owned()),
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
+                auto_download: false,
             },
             Site {
                 id: "ksea".to_uppercase(),
                 name: Some("Seattle".to_owned()),
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
+                auto_download: true,
             },
             Site {
                 id: "kmso".to_uppercase(),
                 name: Some("Missoula".to_owned()),
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: None,
+                auto_download: false,
             },
         ];
 
@@ -547,6 +566,7 @@ mod unit {
             name: Some("Zootown".to_owned()),
             notes: Some("Mountains, not coast.".to_owned()),
             state: None,
+            auto_download: true,
         };
 
         arch.set_site_info(&zootown).expect("Error updating site.");

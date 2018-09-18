@@ -2,6 +2,7 @@ use chrono::{Duration, NaiveDateTime};
 
 use errors::BufkitDataErr;
 use models::Model;
+use site::Site;
 
 /// Inventory lists first & last initialization times of the models in the database for a site &
 /// model. It also contains a list of model initialization times that are missing between the first
@@ -12,6 +13,7 @@ pub struct Inventory {
     pub first: NaiveDateTime,
     pub last: NaiveDateTime,
     pub missing: Vec<(NaiveDateTime, NaiveDateTime)>,
+    pub auto_download: bool,
 }
 
 impl Inventory {
@@ -19,6 +21,7 @@ impl Inventory {
     pub fn new(
         init_times: impl IntoIterator<Item = NaiveDateTime>,
         model: Model,
+        site: Site,
     ) -> Result<Self, BufkitDataErr> {
         let mut init_times = init_times.into_iter();
         let delta_hours = Duration::hours(model.hours_between_runs());
@@ -46,11 +49,13 @@ impl Inventory {
         }
 
         let last = next_init_time;
+        let auto_download = site.auto_download;
 
         Ok(Inventory {
             first,
             last,
             missing,
+            auto_download,
         })
     }
 }

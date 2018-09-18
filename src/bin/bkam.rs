@@ -67,6 +67,16 @@ fn run() -> Result<(), Error> {
                                 .long("state")
                                 .help("Only sites in the given state.")
                                 .takes_value(true),
+                        ).arg(
+                            Arg::with_name("auto-download")
+                                .long("auto-download")
+                                .short("a")
+                                .help("Only list sites that are automatically downloaded by bufdn."),
+                        ).arg(
+                            Arg::with_name("no-auto-download")
+                                .long("no-auto-download")
+                                .short("n")
+                                .help("Only list sites that are automatically downloaded by bufdn."),
                         ),
                 ).subcommand(
                     SubCommand::with_name("modify")
@@ -92,6 +102,12 @@ fn run() -> Result<(), Error> {
                                 .long("notes")
                                 .takes_value(true)
                                 .help("Set the name field to this value."),
+                        ).arg(
+                            Arg::with_name("auto-download")
+                                .long("auto-download")
+                                .help("Set whether or not to automatically download this site.")
+                                .possible_values(&["Yes", "yes", "no", "No"])
+                                .takes_value(true)
                         ),
                 ).subcommand(
                     SubCommand::with_name("inv")
@@ -240,6 +256,19 @@ fn sites_list(
     };
 
     //
+    // Filter based on auto download
+    //
+    let auto_download = &|site: &Site| -> bool { site.auto_download };
+    let no_auto_download = &|site: &Site| -> bool { !site.auto_download };
+    let auto_download_pred: &Fn(&Site) -> bool = if sub_sub_args.is_present("auto-download") {
+        auto_download
+    } else if sub_sub_args.is_present("no-auto-download"){
+        no_auto_download
+    } else {
+        pass
+    };
+
+    //
     // Combine filters to make an iterator over the sites.
     //
     let master_list = arch.get_sites()?;
@@ -249,12 +278,13 @@ fn sites_list(
             .filter(|s| missing_any_pred(s))
             .filter(|s| missing_state_pred(s))
             .filter(|s| in_state_pred(s))
+            .filter(|s| auto_download_pred(s))
     };
 
     if sites_iter().count() == 0 {
         println!("No sites matched criteria.");
     } else {
-        println!("{:^4} {:^5} {:<20} : {}", "ID", "STATE", "NAME", "NOTES");
+        println!("{:^4} {:^5} {:^20} {:^13} : {}", "ID", "STATE", "NAME", "Auto Download", "NOTES");
     }
 
     let blank = "-".to_owned();
@@ -264,7 +294,12 @@ fn sites_list(
         let state = site.state.map(|st| st.as_static()).unwrap_or(&"-");
         let name = site.name.as_ref().unwrap_or(&blank);
         let notes = site.notes.as_ref().unwrap_or(&blank);
-        println!("{:<4} {:^5} {:<20} : {}", id, state, name, notes);
+        let auto_dl = if site.auto_download {
+                "Yes"
+            } else {
+                "No"
+            };
+        println!("{:<4} {:^5} {:<20} {:>13} : {:<}", id, state, name, auto_dl, notes);
     }
 
     Ok(())
@@ -285,6 +320,14 @@ fn sites_modify(
         match StateProv::from_str(&new_state.to_uppercase()) {
             Ok(new_state) => site.state = Some(new_state),
             Err(_) => println!("Unable to parse state/providence: {}", new_state),
+        }
+    }
+
+    if let Some(dl) = sub_sub_args.value_of("auto-download") {
+        match dl {
+            "Yes"|"yes" => site.auto_download = true,
+            "No" | "no" => site.auto_download = false,
+            _ => unreachable!(),
         }
     }
 
@@ -329,6 +372,13 @@ fn sites_inventory(
                 println!("{} -> {} : {:6}", start, end, cycles);
             }
         }
+        let dl = if inv.auto_download {
+            ""
+        } else {
+            " NOT"
+        };
+
+        println!("This site is{} automatically downloaded.", dl);
     }
 
     Ok(())
