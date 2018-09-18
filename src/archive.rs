@@ -706,6 +706,7 @@ mod unit {
             first,
             last,
             missing,
+            auto_download: false, // this is the default value
         };
         assert_eq!(arch.get_inventory("kmso", Model::NAM).unwrap(), expected);
     }
