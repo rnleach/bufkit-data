@@ -1,13 +1,12 @@
 //! An archive of bufkit soundings.
 
+use chrono::NaiveDateTime;
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
+use rusqlite::{Connection, OpenFlags};
 use std::fs::{create_dir, create_dir_all, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-
-use chrono::NaiveDateTime;
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use rusqlite::{Connection, OpenFlags};
 use strum::AsStaticRef;
 
 use errors::BufkitDataErr;

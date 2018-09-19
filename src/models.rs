@@ -1,13 +1,12 @@
 //! Models potentially stored in the archive.
 
+use chrono::{Duration, NaiveDateTime};
 use std::fmt;
 
-use chrono::{Duration, NaiveDateTime};
-
 /// Models potentially stored in the archive.
-#[allow(missing_docs)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter, Hash)]
 pub enum Model {
+    /// The U.S. Global Forecast System
     #[strum(
         to_string = "gfs",
         serialize = "gfs3",
@@ -15,6 +14,7 @@ pub enum Model {
         serialize = "GFS3"
     )]
     GFS,
+    /// The U.S. North American Model
     #[strum(
         to_string = "nam",
         serialize = "namm",
@@ -22,6 +22,7 @@ pub enum Model {
         serialize = "NAMM"
     )]
     NAM,
+    /// The high resolution nest of the `NAM`
     #[strum(to_string = "nam4km", serialize = "NAM4KM")]
     NAM4KM,
 }

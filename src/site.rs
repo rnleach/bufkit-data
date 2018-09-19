@@ -1,22 +1,29 @@
-/// Description of a site with a sounding
-#[allow(missing_docs)]
+/// Description of a site with a sounding.
 #[derive(Debug, PartialEq)]
 pub struct Site {
+    /// Site id, usually a 3 or 4 letter identifier (e.g. kord katl ksea).
     pub id: String,
+    /// A longer, more human readable name.
     pub name: Option<String>,
+    /// Any relevant notes about the site.
     pub notes: Option<String>,
+    /// The state or providence where this location is located. This allows querying sites by what
+    /// state or providence they are in.
     pub state: Option<StateProv>,
+    /// For programs that download files, this allows marking some sites for automatic download
+    /// without further specification.ß
     pub auto_download: bool,
 }
 
 impl Site {
-    /// Return true if there is any missing data.
+    /// Return true if there is any missing data. It ignores the notes field since this is only
+    /// rarely used.
     pub fn incomplete(&self) -> bool {
-        self.name.is_none() || self.notes.is_none() || self.state.is_none()
+        self.name.is_none() || self.state.is_none()
     }
 }
 
-// State/Providence
+/// State/Providence abreviations for declaring a state in the site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, AsStaticStr, EnumIter)]
 #[allow(missing_docs)]
 pub enum StateProv {
@@ -81,6 +88,9 @@ pub enum StateProv {
     VI, // Virgin Islands
 }
 
+/*--------------------------------------------------------------------------------------------------
+                                          Unit Tests
+--------------------------------------------------------------------------------------------------*/
 #[cfg(test)]
 mod unit {
     use super::*;
@@ -101,7 +111,7 @@ mod unit {
         let incomplete_site = Site {
             id: "kxly".to_owned(),
             name: Some("tv station".to_owned()),
-            state: Some(StateProv::VI),
+            state: None,
             notes: None,
             auto_download: true,
         };

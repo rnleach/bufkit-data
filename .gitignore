@@ -6,24 +6,11 @@ Cargo.lock
 *.rs.bk
 
 #
-# General dev related - makefile quick build install
+# General dev related
 #
 makefile
-
-#
-# Sublime Text
-#
-*.sublime-workspace
-*.sublime-project
-
-#
-# VSCode related
-#
+*.sublime*
 .vscode
-
-#
-# Project related
-#
 
 #
 # OS related
