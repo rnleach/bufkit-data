@@ -6,19 +6,11 @@ Cargo.lock
 *.rs.bk
 
 #
-# Sublime Text
+# General dev related
 #
-*.sublime-workspace
-*.sublime-project
-
-#
-# VSCode related
-#
+makefile
+*.sublime*
 .vscode
-
-#
-# Project related
-#
 
 #
 # OS related
