@@ -1,17 +1,23 @@
 use chrono::{Duration, NaiveDateTime};
-
 use errors::BufkitDataErr;
 use models::Model;
+use site::Site;
 
-/// Inventory lists first & last initialization times of the models in the database for a site &
+/// Inventory lists first & last initialization times of the models in the archive for a site &
 /// model. It also contains a list of model initialization times that are missing between the first
 /// and last.
-#[allow(missing_docs)]
 #[derive(Debug, PartialEq, Eq)]
 pub struct Inventory {
+    /// The earliest model run in the archive.
     pub first: NaiveDateTime,
+    /// The last model run in the archive.
     pub last: NaiveDateTime,
-    pub missing: Vec<NaiveDateTime>,
+    /// A list of start and end times for missing model runs.
+    pub missing: Vec<(NaiveDateTime, NaiveDateTime)>,
+    /// Wheter this site is flagged for automatic download.
+    //
+    // TODO - change this to just be a site.
+    pub auto_download: bool,
 }
 
 impl Inventory {
@@ -19,6 +25,7 @@ impl Inventory {
     pub fn new(
         init_times: impl IntoIterator<Item = NaiveDateTime>,
         model: Model,
+        site: Site,
     ) -> Result<Self, BufkitDataErr> {
         let mut init_times = init_times.into_iter();
         let delta_hours = Duration::hours(model.hours_between_runs());
@@ -32,20 +39,27 @@ impl Inventory {
         let mut next_init_time = first;
 
         for init_time in init_times {
-            next_init_time = next_init_time + delta_hours;
+            next_init_time += delta_hours;
+
+            if next_init_time < init_time {
+                let start = next_init_time;
+                let last = init_time - delta_hours;
+                missing.push((start, last));
+            }
 
             while next_init_time < init_time {
-                missing.push(next_init_time);
-                next_init_time = next_init_time + delta_hours;
+                next_init_time += delta_hours;
             }
         }
 
         let last = next_init_time;
+        let auto_download = site.auto_download;
 
         Ok(Inventory {
             first,
             last,
             missing,
+            auto_download,
         })
     }
 }

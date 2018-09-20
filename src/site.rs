@@ -1,30 +1,31 @@
-/// Description of a site with a sounding
-#[allow(missing_docs)]
+/// Description of a site with a sounding.
 #[derive(Debug, PartialEq)]
 pub struct Site {
+    /// Site id, usually a 3 or 4 letter identifier (e.g. kord katl ksea).
     pub id: String,
+    /// A longer, more human readable name.
     pub name: Option<String>,
-    pub lat: Option<f64>,
-    pub lon: Option<f64>,
-    pub elev_m: Option<f64>,
+    /// Any relevant notes about the site.
     pub notes: Option<String>,
+    /// The state or providence where this location is located. This allows querying sites by what
+    /// state or providence they are in.
     pub state: Option<StateProv>,
+    /// For programs that download files, this allows marking some sites for automatic download
+    /// without further specification.ß
+    pub auto_download: bool,
 }
 
 impl Site {
-    /// Return true if there is any missing data.
+    /// Return true if there is any missing data. It ignores the notes field since this is only
+    /// rarely used.
     pub fn incomplete(&self) -> bool {
-        self.lat.is_none()
-            || self.lon.is_none()
-            || self.elev_m.is_none()
-            || self.name.is_none()
-            || self.notes.is_none()
-            || self.state.is_none()
+        self.name.is_none() || self.state.is_none()
     }
 }
 
-// State/Providence
+/// State/Providence abreviations for declaring a state in the site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, AsStaticStr, EnumIter)]
+#[allow(missing_docs)]
 pub enum StateProv {
     AL, // Alabama
     AK, // Alaska
@@ -87,12 +88,37 @@ pub enum StateProv {
     VI, // Virgin Islands
 }
 
+/*--------------------------------------------------------------------------------------------------
+                                          Unit Tests
+--------------------------------------------------------------------------------------------------*/
 #[cfg(test)]
 mod unit {
     use super::*;
 
     use std::str::FromStr;
     use strum::{AsStaticRef, IntoEnumIterator};
+
+    #[test]
+    fn test_site_incomplete() {
+        let complete_site = Site {
+            id: "kxly".to_owned(),
+            name: Some("tv station".to_owned()),
+            state: Some(StateProv::VI),
+            notes: Some("".to_owned()),
+            auto_download: false,
+        };
+
+        let incomplete_site = Site {
+            id: "kxly".to_owned(),
+            name: Some("tv station".to_owned()),
+            state: None,
+            notes: None,
+            auto_download: true,
+        };
+
+        assert!(!complete_site.incomplete());
+        assert!(incomplete_site.incomplete());
+    }
 
     #[test]
     fn test_to_string_for_state_prov() {
