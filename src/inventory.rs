@@ -22,10 +22,10 @@ pub struct Inventory {
 
 impl Inventory {
     /// Create a new inventory. Assume the provided data is sorted from earliest to latest.
-    pub fn new(
+    pub(crate) fn new(
         init_times: impl IntoIterator<Item = NaiveDateTime>,
         model: Model,
-        site: Site,
+        site: &Site,
     ) -> Result<Self, BufkitDataErr> {
         let mut init_times = init_times.into_iter();
         let delta_hours = Duration::hours(model.hours_between_runs());

@@ -340,7 +340,7 @@ impl Archive {
         let init_times: Vec<NaiveDateTime> =
             init_times?.into_iter().filter_map(|res| res.ok()).collect();
 
-        let site = self.get_site_info(site_id)?;
+        let site = &self.get_site_info(site_id)?;
 
         Inventory::new(init_times, model, site)
     }
