@@ -17,6 +17,7 @@ use site::{Site, StateProv};
 /// The archive.
 #[derive(Debug)]
 pub struct Archive {
+    root: PathBuf,       // The root directory.
     data_root: PathBuf,  // the directory containing the downloaded files.
     db_conn: Connection, // An sqlite connection.
 }
@@ -32,8 +33,9 @@ impl Archive {
     {
         let data_root = root.as_ref().join(Archive::DATA_DIR);
         let db_file = root.as_ref().join(Archive::DB_FILE);
+        let root = root.as_ref().to_path_buf();
 
-        create_dir_all(root.as_ref())?;
+        create_dir_all(&root)?;
         create_dir(&data_root)?; // The folder to store the sounding files.
 
         // Create and set up the database
@@ -64,7 +66,7 @@ impl Archive {
             &[],
         )?;
 
-        Ok(Archive { data_root, db_conn })
+        Ok(Archive { root, data_root, db_conn })
     }
 
     /// Open an existing archive.
@@ -74,11 +76,17 @@ impl Archive {
     {
         let data_root = root.as_ref().join(Archive::DATA_DIR);
         let db_file = root.as_ref().join(Archive::DB_FILE);
+        let root = root.as_ref().to_path_buf();
 
         // Create and set up the database
         let db_conn = Connection::open_with_flags(db_file, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
 
-        Ok(Archive { data_root, db_conn })
+        Ok(Archive { root, data_root, db_conn })
+    }
+
+    /// Retrieve a path to the root. Allows caller to store files in the database.
+    pub fn get_root(&self) -> &Path {
+        &self.root
     }
 
     /// Retrieve a list of sites in the archive.
@@ -460,6 +468,15 @@ mod unit {
 
         assert!(Archive::connect(tmp.path()).is_ok());
         assert!(Archive::connect("unlikely_directory_in_my_project").is_err());
+    }
+
+    #[test]
+    fn test_get_root() {
+        let TestArchive { tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
+
+        let root = arch.get_root();
+        assert_eq!(root, tmp.path());
     }
 
     #[test]
