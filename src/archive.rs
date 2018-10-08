@@ -190,6 +190,22 @@ impl Archive {
         Ok(number == 1)
     }
 
+    /// Get a list of models in the database for this site.
+    pub fn models_for_site(&self, site_id: &str) -> Result<Vec<Model>, BufkitDataErr> {
+        let mut stmt = self
+            .db_conn
+            .prepare("SELECT DISTINCT model FROM files WHERE site = ?1")?;
+
+        let vals: Result<Vec<Model>, BufkitDataErr> = stmt
+            .query_map(&[&site_id.to_uppercase()], |row| {
+                let model: String = row.get(0);
+                Model::from_str(&model).map_err(|_err| BufkitDataErr::InvalidModelName(model))
+            })?.flat_map(|res| res.map_err(BufkitDataErr::Database).into_iter())
+            .collect();
+
+        vals
+    }
+
     /// Add a bufkit file to the archive.
     pub fn add_file(
         &self,
@@ -683,6 +699,26 @@ mod unit {
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(18, 0, 0)
                 ).expect("Error checking for existence")
         );
+    }
+
+    #[test]
+    fn test_models_for_site() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch).expect("Error filling test archive.");
+
+        let models = arch
+            .models_for_site("kmso")
+            .expect("Error querying archive.");
+
+        assert!(models.contains(&Model::GFS));
+        assert!(models.contains(&Model::NAM));
+        assert!(!models.contains(&Model::NAM4KM));
+        assert!(!models.contains(&Model::LocalWrf));
+        assert!(!models.contains(&Model::Other));
     }
 
     #[test]
