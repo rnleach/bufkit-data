@@ -191,19 +191,16 @@ impl Archive {
     }
 
     /// Get a list of models in the database for this site.
-    pub fn models_for_site(&self, site_id: &str)-> Result<Vec<Model>, BufkitDataErr> {
+    pub fn models_for_site(&self, site_id: &str) -> Result<Vec<Model>, BufkitDataErr> {
         let mut stmt = self
             .db_conn
             .prepare("SELECT DISTINCT model FROM files WHERE site = ?1")?;
 
         let vals: Result<Vec<Model>, BufkitDataErr> = stmt
-            .query_map(
-                &[&site_id.to_uppercase()], 
-                |row| {
-                    let model: String = row.get(0);
-                    Model::from_str(&model).map_err(|_err| BufkitDataErr::InvalidModelName(model))
-                }
-            )?.flat_map(|res| res.map_err(BufkitDataErr::Database).into_iter())
+            .query_map(&[&site_id.to_uppercase()], |row| {
+                let model: String = row.get(0);
+                Model::from_str(&model).map_err(|_err| BufkitDataErr::InvalidModelName(model))
+            })?.flat_map(|res| res.map_err(BufkitDataErr::Database).into_iter())
             .collect();
 
         vals
@@ -705,7 +702,7 @@ mod unit {
     }
 
     #[test]
-    fn test_models_for_site(){
+    fn test_models_for_site() {
         let TestArchive {
             tmp: _tmp,
             mut arch,
@@ -713,7 +710,9 @@ mod unit {
 
         fill_test_archive(&mut arch).expect("Error filling test archive.");
 
-        let models = arch.models_for_site("kmso").expect("Error querying archive.");
+        let models = arch
+            .models_for_site("kmso")
+            .expect("Error querying archive.");
 
         assert!(models.contains(&Model::GFS));
         assert!(models.contains(&Model::NAM));
