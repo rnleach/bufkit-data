@@ -11,7 +11,7 @@ pub struct Site {
     /// state or providence they are in.
     pub state: Option<StateProv>,
     /// For programs that download files, this allows marking some sites for automatic download
-    /// without further specification.ß
+    /// without further specification.
     pub auto_download: bool,
 }
 
