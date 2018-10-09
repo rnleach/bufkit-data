@@ -3,7 +3,7 @@
 use chrono::NaiveDateTime;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{Connection, OpenFlags};
-use std::fs::{create_dir, create_dir_all, remove_file, File};
+use std::fs::{create_dir, create_dir_all, read_dir, remove_file, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -398,6 +398,88 @@ impl Archive {
         )?;
 
         Ok(())
+    }
+
+    /// Validate files listed in the index are in the archive too, if not remove them.
+    ///
+    /// Returns a `Vec` of messages about missing files.
+    pub fn clean_index(&self) -> Result<Vec<String>, BufkitDataErr> {
+        let mut stmt = self.db_conn.prepare("SELECT rowid, file_name FROM files")?;
+
+        let vals: Result<Vec<(isize, String)>, BufkitDataErr> = stmt
+            .query_map(&[], |row| {
+                let id: isize = row.get(0);
+                let path: String = row.get(1);
+
+                (id, path)
+            })?.map(|res| res.map_err(BufkitDataErr::Database))
+            .collect();
+        let vals = vals?;
+
+        let mut bad_rows: Vec<isize> = vec![];
+        let mut messages: Vec<String> = vec![];
+        for (row, fname) in vals {
+            let fname = self.data_root.join(fname);
+            if !fname.as_path().is_file() {
+                messages.push(format!("File {} doesn't exist.", fname.to_string_lossy()));
+                bad_rows.push(row);
+            }
+        }
+
+        let mut del_stmt = self.db_conn.prepare("DELETE FROM files WHERE rowid = ?1")?;
+        for bad_row in bad_rows {
+            del_stmt.execute(&[&bad_row])?;
+        }
+
+        messages.push("Vacuuming the index database.".to_owned());
+        self.db_conn.execute("VACUUM", &[])?;
+        messages.push("Vacuumed the index datatabase.".to_owned());
+
+        Ok(messages)
+    }
+
+    /// Search for appropriately named files in the data directory and make sure they are in the
+    /// index. If a file is not appropriately name or if it is a directory, it is deleted.
+    ///
+    /// Returns a `Vec` of messages about added files.
+    pub fn clean_data(&self) -> Result<Vec<String>, BufkitDataErr> {
+        let mut messages: Vec<String> = vec![];
+        let entries = read_dir(&self.data_root)?;
+
+        for entry in entries {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let file_name = file_name.to_string_lossy();
+
+            let full_path = entry.path();
+
+            let mut stmt = self
+                .db_conn
+                .prepare("SELECT rowid FROM files WHERE file_name = ?1 ")?;
+            if full_path.is_dir() {
+                messages.push(format!(
+                    "Path {} is a directory is being deleted.",
+                    file_name
+                ));
+                unimplemented!();
+            } else if full_path.is_file() {
+                if file_name.contains(".buf.gz") {
+                    if !stmt.exists(&[&file_name])? {
+                        println!("NEED TO ADD {} to the index", file_name);
+                    }
+                } else {
+                    messages.push(format!(
+                        "Path {} is not named correctly and is being deleted.",
+                        file_name
+                    ));
+                    unimplemented!();
+                }
+            } else {
+                messages.push(format!("Path {} is unknown type.", file_name));
+            }
+        }
+
+        Ok(messages)
     }
 }
 
