@@ -3,7 +3,7 @@
 use chrono::NaiveDateTime;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{Connection, OpenFlags};
-use std::fs::{create_dir, create_dir_all, File};
+use std::fs::{create_dir, create_dir_all, remove_file, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -66,7 +66,11 @@ impl Archive {
             &[],
         )?;
 
-        Ok(Archive { root, data_root, db_conn })
+        Ok(Archive {
+            root,
+            data_root,
+            db_conn,
+        })
     }
 
     /// Open an existing archive.
@@ -81,7 +85,11 @@ impl Archive {
         // Create and set up the database
         let db_conn = Connection::open_with_flags(db_file, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
 
-        Ok(Archive { root, data_root, db_conn })
+        Ok(Archive {
+            root,
+            data_root,
+            db_conn,
+        })
     }
 
     /// Retrieve a path to the root. Allows caller to store files in the database.
@@ -367,6 +375,29 @@ impl Archive {
         let site = &self.get_site_info(site_id)?;
 
         Inventory::new(init_times, model, site)
+    }
+
+    /// Remove a file from the archive.
+    pub fn remove_file(
+        &self,
+        site_id: &str,
+        model: Model,
+        init_time: &NaiveDateTime,
+    ) -> Result<(), BufkitDataErr> {
+        let file_name: String = self.db_conn.query_row(
+            "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
+            &[&site_id.to_uppercase(), &model.as_static(), init_time],
+            |row| row.get_checked(0),
+        )??;
+
+        remove_file(self.data_root.join(file_name)).map_err(|err| BufkitDataErr::IO(err))?;
+
+        self.db_conn.execute(
+            "DELETE FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
+            &[&site_id.to_uppercase(), &model.as_static(), init_time],
+        )?;
+
+        Ok(())
     }
 }
 
@@ -761,5 +792,31 @@ mod unit {
             auto_download: false, // this is the default value
         };
         assert_eq!(arch.get_inventory("kmso", Model::NAM).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_remove_file() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch).expect("Error filling test archive.");
+
+        let init_time = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let model = Model::GFS;
+        let site = "kmso";
+
+        assert!(
+            arch.exists(site, model, &init_time)
+                .expect("Error checking db")
+        );
+        arch.remove_file(site, model, &init_time)
+            .expect("Error while removing.");
+        assert!(
+            !arch
+                .exists(site, model, &init_time)
+                .expect("Error checking db")
+        );
     }
 }
