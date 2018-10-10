@@ -1,12 +1,14 @@
 //! An archive of bufkit soundings.
 
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{Connection, OpenFlags};
-use std::fs::{create_dir, create_dir_all, remove_file, File};
+use std::fs::{create_dir, create_dir_all, read_dir, remove_dir, remove_file, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::thread;
 use strum::AsStaticRef;
 
 use errors::BufkitDataErr;
@@ -323,6 +325,30 @@ impl Archive {
             model.as_static(),
             site_id.to_uppercase()
         )
+    }
+
+    fn parse_compressed_file_name(fname: &str) -> Option<(NaiveDateTime, Model, String)> {
+        let tokens: Vec<&str> = fname.split(|c| c == '_' || c == '.').collect();
+
+        if tokens.len() != 5 {
+            return None;
+        }
+
+        let year = tokens[0][0..4].parse::<i32>().ok()?;
+        let month = tokens[0][4..6].parse::<u32>().ok()?;
+        let day = tokens[0][6..8].parse::<u32>().ok()?;
+        let hour = tokens[0][8..10].parse::<u32>().ok()?;
+        let init_time = NaiveDate::from_ymd(year, month, day).and_hms(hour, 0, 0);
+
+        let model = Model::from_str(tokens[1]).ok()?;
+
+        let site = tokens[2].to_owned();
+
+        if tokens[3] != "buf" || tokens[4] != "gz" {
+            return None;
+        }
+
+        Some((init_time, model, site))
     }
 
     /// Get the file name this would have if uncompressed.
