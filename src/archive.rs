@@ -399,6 +399,153 @@ impl Archive {
 
         Ok(())
     }
+
+    /// Validate files listed in the index are in the archive too, if not remove them from the
+    /// index.
+    ///
+    /// Returns a `Vec` of messages about missing files.
+    pub fn clean_index(&self) -> Result<(isize, Receiver<(isize, Option<String>)>), BufkitDataErr> {
+        let count: isize =
+            self.db_conn
+                .query_row("SELECT COUNT(rowid) FROM files", &[], |row| row.get(0))?;
+
+        let (tx_main, rx_worker): (Sender<(isize, String)>, Receiver<(_, _)>) = channel();
+        let (tx_worker, rx_main): (Sender<(isize, Option<String>)>, Receiver<(_, _)>) = channel();
+        let root = self.root.clone();
+
+        thread::spawn(move || {
+            let arch = Archive::connect(root).unwrap();
+            let mut del_stmt = arch
+                .db_conn
+                .prepare("DELETE FROM files WHERE rowid = ?1")
+                .unwrap();
+
+            for (rowid, fname) in rx_worker.into_iter() {
+                let fname = arch.data_root.join(fname);
+                let check_result = if !fname.as_path().is_file() {
+                    del_stmt.execute(&[&rowid]).unwrap();
+                    (
+                        rowid,
+                        Some(format!("File {} doesn't exist.", fname.to_string_lossy())),
+                    )
+                } else {
+                    (rowid, None)
+                };
+                tx_worker.send(check_result).unwrap();
+            }
+        });
+
+        let mut stmt = self
+            .db_conn
+            .prepare("SELECT rowid, file_name FROM files ORDER BY rowid ASC")?;
+
+        let vals: Result<Vec<(isize, String)>, BufkitDataErr> = stmt
+            .query_map(&[], |row| {
+                let id: isize = row.get(0);
+                let path: String = row.get(1);
+
+                (id, path)
+            })?.map(|res| res.map_err(BufkitDataErr::Database))
+            .collect();
+        let vals = vals?;
+
+        for val in vals {
+            tx_main.send(val).map_err(|_| BufkitDataErr::GeneralError)?;
+        }
+
+        Ok((count, rx_main))
+    }
+
+    /// Search for appropriately named files in the data directory and make sure they are in the
+    /// index. If a file is not appropriately name or if it is a directory, it is deleted.
+    ///
+    /// Returns a `Vec` of messages about added files.
+    pub fn clean_data(&self) -> Result<(usize, Receiver<(usize, Option<String>)>), BufkitDataErr> {
+        self.db_conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS fname ON files (file_name)",
+            &[],
+        )?;
+
+        let root = self.root.clone();
+        let num_entries = read_dir(&self.data_root)?.count();
+        let entries = read_dir(&self.data_root)?;
+
+        let (tx_worker, rx_main) = channel();
+
+        thread::spawn(move || {
+            let arch = Archive::connect(root).unwrap();
+            let mut stmt = arch
+                .db_conn
+                .prepare("SELECT rowid FROM files WHERE file_name = ?1 ")
+                .unwrap();
+
+            for (i, entry) in entries.enumerate() {
+                let entry = entry.unwrap();
+                let file_name = entry.file_name();
+                let file_name = file_name.to_string_lossy();
+                let full_path = entry.path();
+
+                let result = if full_path.is_dir() {
+                    let msg = format!("Found directory.");
+                    remove_dir(&full_path).unwrap();
+                    (i, Some(msg))
+                } else if full_path.is_file() {
+                    if file_name.contains(".buf.gz") {
+                        if !stmt.exists(&[&file_name]).unwrap() {
+                            if let Some((init_time, model, site)) =
+                                Self::parse_compressed_file_name(&file_name)
+                            {
+                                match arch.db_conn.execute(
+                                    "INSERT INTO files (site, model, init_time, file_name)
+                                          VALUES (?1, ?2, ?3, ?4)",
+                                    &[
+                                        &site.to_uppercase(),
+                                        &model.as_static(),
+                                        &init_time,
+                                        &file_name,
+                                    ],
+                                ) {
+                                    Ok(_) => {
+                                        let msg = format!("Added {}", file_name);
+                                        (i, Some(msg))
+                                    }
+                                    Err(_) => {
+                                        let msg = format!("Duplicate File: {}", file_name);
+                                        remove_file(&full_path).unwrap();
+                                        (i, Some(msg))
+                                    }
+                                }
+                            } else {
+                                let msg = format!("Bad File: {}", file_name);
+                                remove_file(&full_path).unwrap();
+                                (i, Some(msg))
+                            }
+                        } else {
+                            (i, None)
+                        }
+                    } else {
+                        let msg = format!("Bad File: {}", file_name);
+                        remove_file(&full_path).unwrap();
+                        (i, Some(msg))
+                    }
+                } else {
+                    let msg = format!("Uknown: {}", file_name);
+                    (i, Some(msg))
+                };
+
+                tx_worker.send(result).unwrap()
+            }
+        });
+
+        Ok((num_entries, rx_main))
+    }
+
+    /// Compress the index file. This cleans up and reorganizes the index file.
+    pub fn compress_index(&self) -> Result<(), BufkitDataErr> {
+        self.db_conn.execute("VACUUM", &[])?;
+
+        Ok(())
+    }
 }
 
 /*--------------------------------------------------------------------------------------------------
