@@ -426,7 +426,8 @@ impl Archive {
         Ok(())
     }
 
-    /// Validate files listed in the index are in the archive too, if not remove them.
+    /// Validate files listed in the index are in the archive too, if not remove them from the
+    /// index.
     ///
     /// Returns a `Vec` of messages about missing files.
     pub fn clean_index(&self) -> Result<(isize, Receiver<(isize, Option<String>)>), BufkitDataErr> {
@@ -520,8 +521,8 @@ impl Archive {
                             if let Some((init_time, model, site)) =
                                 Self::parse_compressed_file_name(&file_name)
                             {
-                                arch.db_conn.execute(
-                                    "INSERT OR REPLACE INTO files (site, model, init_time, file_name)
+                                match arch.db_conn.execute(
+                                    "INSERT INTO files (site, model, init_time, file_name)
                                           VALUES (?1, ?2, ?3, ?4)",
                                     &[
                                         &site.to_uppercase(),
@@ -529,10 +530,17 @@ impl Archive {
                                         &init_time,
                                         &file_name,
                                     ],
-                                ).unwrap();
-
-                                let msg = format!("Added {}", file_name);
-                                (i, Some(msg))
+                                ) {
+                                    Ok(_) => {
+                                        let msg = format!("Added {}", file_name);
+                                        (i, Some(msg))
+                                    }
+                                    Err(_) => {
+                                        let msg = format!("Duplicate File: {}", file_name);
+                                        remove_file(&full_path).unwrap();
+                                        (i, Some(msg))
+                                    }
+                                }
                             } else {
                                 let msg = format!("Bad File: {}", file_name);
                                 remove_file(&full_path).unwrap();
@@ -556,6 +564,13 @@ impl Archive {
         });
 
         Ok((num_entries, rx_main))
+    }
+
+    /// Compress the index file. This cleans up and reorganizes the index file.
+    pub fn compress_index(&self) -> Result<(), BufkitDataErr> {
+        self.db_conn.execute("VACUUM", &[])?;
+
+        Ok(())
     }
 }
 
