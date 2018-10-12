@@ -3,7 +3,7 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{Connection, OpenFlags};
-use std::fs::{create_dir, create_dir_all, read_dir, remove_dir, remove_file, File};
+use std::fs::{create_dir, create_dir_all, read_dir, remove_dir_all, remove_file, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -512,8 +512,8 @@ impl Archive {
                 let full_path = entry.path();
 
                 let result = if full_path.is_dir() {
-                    let msg = format!("Found directory.");
-                    remove_dir(&full_path).unwrap();
+                    let msg = format!("Removing directory.");
+                    remove_dir_all(&full_path).unwrap();
                     (i, Some(msg))
                 } else if full_path.is_file() {
                     if file_name.contains(".buf.gz") {
