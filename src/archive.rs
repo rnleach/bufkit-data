@@ -3,7 +3,7 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{Connection, OpenFlags};
-use std::fs::{create_dir, create_dir_all, read_dir, remove_dir, remove_file, File};
+use std::fs::{create_dir, create_dir_all, read_dir, remove_dir_all, remove_file, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -379,8 +379,12 @@ impl Archive {
         Ok(num_records == 1)
     }
 
-    /// Get an inventory of soundings for a site & model.
-    pub fn get_inventory(&self, site_id: &str, model: Model) -> Result<Inventory, BufkitDataErr> {
+    /// Get a list of all the available model initialization times for a given site and model.
+    pub fn get_init_times(
+        &self,
+        site_id: &str,
+        model: Model,
+    ) -> Result<Vec<NaiveDateTime>, BufkitDataErr> {
         let mut stmt = self.db_conn.prepare(
             "
                 SELECT init_time FROM files 
@@ -397,6 +401,13 @@ impl Archive {
 
         let init_times: Vec<NaiveDateTime> =
             init_times?.into_iter().filter_map(|res| res.ok()).collect();
+
+        Ok(init_times)
+    }
+
+    /// Get an inventory of soundings for a site & model.
+    pub fn get_inventory(&self, site_id: &str, model: Model) -> Result<Inventory, BufkitDataErr> {
+        let init_times = self.get_init_times(site_id, model)?;
 
         let site = &self.get_site_info(site_id)?;
 
@@ -512,8 +523,8 @@ impl Archive {
                 let full_path = entry.path();
 
                 let result = if full_path.is_dir() {
-                    let msg = format!("Found directory.");
-                    remove_dir(&full_path).unwrap();
+                    let msg = format!("Removing directory.");
+                    remove_dir_all(&full_path).unwrap();
                     (i, Some(msg))
                 } else if full_path.is_file() {
                     if file_name.contains(".buf.gz") {
