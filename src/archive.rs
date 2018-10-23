@@ -379,8 +379,12 @@ impl Archive {
         Ok(num_records == 1)
     }
 
-    /// Get an inventory of soundings for a site & model.
-    pub fn get_inventory(&self, site_id: &str, model: Model) -> Result<Inventory, BufkitDataErr> {
+    /// Get a list of all the available model initialization times for a given site and model.
+    pub fn get_init_times(
+        &self,
+        site_id: &str,
+        model: Model,
+    ) -> Result<Vec<NaiveDateTime>, BufkitDataErr> {
         let mut stmt = self.db_conn.prepare(
             "
                 SELECT init_time FROM files 
@@ -397,6 +401,13 @@ impl Archive {
 
         let init_times: Vec<NaiveDateTime> =
             init_times?.into_iter().filter_map(|res| res.ok()).collect();
+
+        Ok(init_times)
+    }
+
+    /// Get an inventory of soundings for a site & model.
+    pub fn get_inventory(&self, site_id: &str, model: Model) -> Result<Inventory, BufkitDataErr> {
+        let init_times = self.get_init_times(site_id, model)?;
 
         let site = &self.get_site_info(site_id)?;
 

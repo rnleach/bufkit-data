@@ -14,9 +14,7 @@ pub struct Inventory {
     pub last: NaiveDateTime,
     /// A list of start and end times for missing model runs.
     pub missing: Vec<(NaiveDateTime, NaiveDateTime)>,
-    /// Wheter this site is flagged for automatic download.
-    //
-    // TODO - change this to just be a site.
+    /// Whether this site is flagged for automatic download.
     pub auto_download: bool,
 }
 
