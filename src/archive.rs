@@ -2,7 +2,7 @@
 
 use chrono::{NaiveDate, NaiveDateTime};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, NO_PARAMS, types::ToSql};
 use std::fs::{create_dir, create_dir_all, read_dir, remove_dir_all, remove_file, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -54,7 +54,7 @@ impl Archive {
                 file_name TEXT NOT NULL,
                 PRIMARY KEY (site, model, init_time)
             )",
-            &[],
+            NO_PARAMS,
         )?;
 
         db_conn.execute(
@@ -65,7 +65,7 @@ impl Archive {
                 notes         TEXT DEFAULT NULL,
                 auto_download INT DEFAULT 0
             )",
-            &[],
+            NO_PARAMS,
         )?;
 
         Ok(Archive {
@@ -106,7 +106,7 @@ impl Archive {
             .prepare("SELECT site,name,state,notes,auto_download FROM sites")?;
 
         let vals: Result<Vec<Site>, BufkitDataErr> = stmt
-            .query_map(&[], |row| {
+            .query_map(NO_PARAMS, |row| {
                 let id = row.get(0);
                 let name = row.get(1);
                 let notes = row.get(3);
@@ -170,7 +170,7 @@ impl Archive {
             ",
             &[
                 &site.id.to_uppercase(),
-                &site.state.map(|state_prov| state_prov.as_static()),
+                &site.state.map(|state_prov| state_prov.as_static()) as &ToSql,
                 &site.name,
                 &site.notes,
                 &site.auto_download,
@@ -187,7 +187,7 @@ impl Archive {
                   VALUES (?1, ?2, ?3, ?4, ?5)",
             &[
                 &site.id.to_uppercase(),
-                &site.state.map(|state_prov| state_prov.as_static()),
+                &site.state.map(|state_prov| state_prov.as_static()) as &ToSql,
                 &site.name,
                 &site.notes,
                 &site.auto_download,
@@ -251,9 +251,9 @@ impl Archive {
             "INSERT OR REPLACE INTO files (site, model, init_time, file_name)
                   VALUES (?1, ?2, ?3, ?4)",
             &[
-                &site_id.to_uppercase(),
-                &model.as_static(),
-                init_time,
+                &site_id.to_uppercase() as &ToSql,
+                &model.as_static() as &ToSql,
+                init_time as &ToSql,
                 &file_name,
             ],
         )?;
@@ -270,7 +270,7 @@ impl Archive {
     ) -> Result<String, BufkitDataErr> {
         let file_name: String = self.db_conn.query_row(
             "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[&site_id.to_uppercase(), &model.as_static(), init_time],
+            &[&site_id.to_uppercase() as &ToSql, &model.as_static() as &ToSql, init_time as &ToSql],
             |row| row.get_checked(0),
         )??;
 
@@ -294,7 +294,7 @@ impl Archive {
                 ORDER BY init_time DESC
                 LIMIT 1
             ",
-            &[&site_id.to_uppercase(), &model.as_static()],
+            &[&site_id.to_uppercase(), model.as_static()],
             |row| row.get_checked(0),
         )??;
 
@@ -372,7 +372,7 @@ impl Archive {
     ) -> Result<bool, BufkitDataErr> {
         let num_records: i32 = self.db_conn.query_row(
             "SELECT COUNT(*) FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[&site_id.to_uppercase(), &model.as_static(), init_time],
+            &[&site_id.to_uppercase() as &ToSql, &model.as_static() as &ToSql, init_time as &ToSql],
             |row| row.get_checked(0),
         )??;
 
@@ -394,7 +394,7 @@ impl Archive {
         )?;
 
         let init_times: Result<Vec<Result<NaiveDateTime, _>>, BufkitDataErr> = stmt
-            .query_map(&[&site_id.to_uppercase(), &model.as_static()], |row| {
+            .query_map(&[&site_id.to_uppercase(), model.as_static()], |row| {
                 row.get_checked(0)
             })?.map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
@@ -423,7 +423,7 @@ impl Archive {
     ) -> Result<(), BufkitDataErr> {
         let file_name: String = self.db_conn.query_row(
             "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[&site_id.to_uppercase(), &model.as_static(), init_time],
+            &[&site_id.to_uppercase() as &ToSql, &model.as_static() as &ToSql, init_time as &ToSql],
             |row| row.get_checked(0),
         )??;
 
@@ -431,7 +431,7 @@ impl Archive {
 
         self.db_conn.execute(
             "DELETE FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[&site_id.to_uppercase(), &model.as_static(), init_time],
+            &[&site_id.to_uppercase() as &ToSql, &model.as_static() as &ToSql, init_time as &ToSql],
         )?;
 
         Ok(())
@@ -444,7 +444,7 @@ impl Archive {
     pub fn clean_index(&self) -> Result<(isize, Receiver<(isize, Option<String>)>), BufkitDataErr> {
         let count: isize =
             self.db_conn
-                .query_row("SELECT COUNT(rowid) FROM files", &[], |row| row.get(0))?;
+                .query_row("SELECT COUNT(rowid) FROM files", NO_PARAMS, |row| row.get(0))?;
 
         let (tx_main, rx_worker): (Sender<(isize, String)>, Receiver<(_, _)>) = channel();
         let (tx_worker, rx_main): (Sender<(isize, Option<String>)>, Receiver<(_, _)>) = channel();
@@ -477,7 +477,7 @@ impl Archive {
             .prepare("SELECT rowid, file_name FROM files ORDER BY rowid ASC")?;
 
         let vals: Result<Vec<(isize, String)>, BufkitDataErr> = stmt
-            .query_map(&[], |row| {
+            .query_map(NO_PARAMS, |row| {
                 let id: isize = row.get(0);
                 let path: String = row.get(1);
 
@@ -500,7 +500,7 @@ impl Archive {
     pub fn clean_data(&self) -> Result<(usize, Receiver<(usize, Option<String>)>), BufkitDataErr> {
         self.db_conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS fname ON files (file_name)",
-            &[],
+            NO_PARAMS,
         )?;
 
         let root = self.root.clone();
@@ -536,9 +536,9 @@ impl Archive {
                                     "INSERT INTO files (site, model, init_time, file_name)
                                           VALUES (?1, ?2, ?3, ?4)",
                                     &[
-                                        &site.to_uppercase(),
-                                        &model.as_static(),
-                                        &init_time,
+                                        &site.to_uppercase() as &ToSql,
+                                        &model.as_static() as &ToSql,
+                                        &init_time as &ToSql,
                                         &file_name,
                                     ],
                                 ) {
@@ -579,7 +579,7 @@ impl Archive {
 
     /// Compress the index file. This cleans up and reorganizes the index file.
     pub fn compress_index(&self) -> Result<(), BufkitDataErr> {
-        self.db_conn.execute("VACUUM", &[])?;
+        self.db_conn.execute("VACUUM", NO_PARAMS)?;
 
         Ok(())
     }
