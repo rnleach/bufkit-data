@@ -1,6 +1,6 @@
 [package]
 name = "bufkit-data"
-version = "0.3.7"
+version = "0.3.8"
 authors = ["Ryan Leach <clumsycodemonkey@gmail.com>"]
 description = "A crate to manage an archive of bufkit files."
 repository = "https://github.com/rnleach/bufkit-data.git"
@@ -17,7 +17,7 @@ travis-ci = { repository = "rnleach/bufkit-data", branch = "master" }
 chrono = "0.4.2"
 failure = "0.1.1"
 flate2 = {version = "1.0", features = ["rust_backend"], default-features = false }
-rusqlite = { version = "0.14.0", features = ["bundled", "chrono"], default-features = false }
+rusqlite = { version = "0.15", features = ["bundled", "chrono"], default-features = false }
 sounding-analysis = "0.8.1"
 sounding-bufkit = "0.8.1"
 strum = "0.11"
