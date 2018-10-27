@@ -513,7 +513,7 @@ impl Archive {
     }
 
     /// Search for appropriately named files in the data directory and make sure they are in the
-    /// index. If a file is not appropriately name or if it is a directory, it is deleted.
+    /// index. If a file is not appropriately named or if it is a directory, it is deleted.
     ///
     /// Returns a `Vec` of messages about added files.
     pub fn clean_data(&self) -> Result<(usize, Receiver<(usize, Option<String>)>), BufkitDataErr> {
@@ -551,6 +551,17 @@ impl Archive {
                             if let Some((init_time, model, site)) =
                                 Self::parse_compressed_file_name(&file_name)
                             {
+                                if !arch.site_exists(&site).unwrap() {  
+                                    arch.add_site(&Site{
+                                        id: site.clone(),
+                                        state: None,
+                                        name: None,
+                                        notes: None,
+                                        auto_download: false,
+                                        time_zone: None,
+                                    }).unwrap();
+                                }
+
                                 match arch.db_conn.execute(
                                     "INSERT INTO files (site, model, init_time, file_name)
                                           VALUES (?1, ?2, ?3, ?4)",
