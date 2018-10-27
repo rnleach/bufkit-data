@@ -1,3 +1,5 @@
+use chrono::FixedOffset;
+
 /// Description of a site with a sounding.
 #[derive(Debug, PartialEq)]
 pub struct Site {
@@ -13,13 +15,15 @@ pub struct Site {
     /// For programs that download files, this allows marking some sites for automatic download
     /// without further specification.
     pub auto_download: bool,
+    /// Time zone information
+    pub time_zone: Option<FixedOffset>,
 }
 
 impl Site {
     /// Return true if there is any missing data. It ignores the notes field since this is only
     /// rarely used.
     pub fn incomplete(&self) -> bool {
-        self.name.is_none() || self.state.is_none()
+        self.name.is_none() || self.state.is_none() || self.time_zone.is_none()
     }
 }
 
@@ -106,6 +110,7 @@ mod unit {
             state: Some(StateProv::VI),
             notes: Some("".to_owned()),
             auto_download: false,
+            time_zone: Some(FixedOffset::west(7 * 3600)),
         };
 
         let incomplete_site = Site {
@@ -114,6 +119,7 @@ mod unit {
             state: None,
             notes: None,
             auto_download: true,
+            time_zone: None,
         };
 
         assert!(!complete_site.incomplete());

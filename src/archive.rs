@@ -1,8 +1,8 @@
 //! An archive of bufkit soundings.
 
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{FixedOffset, NaiveDate, NaiveDateTime};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use rusqlite::{Connection, OpenFlags, NO_PARAMS, types::ToSql};
+use rusqlite::{types::ToSql, Connection, OpenFlags, Row, NO_PARAMS};
 use std::fs::{create_dir, create_dir_all, read_dir, remove_dir_all, remove_file, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -63,7 +63,8 @@ impl Archive {
                 state         TEXT DEFAULT NULL,
                 name          TEXT DEFAULT NULL,
                 notes         TEXT DEFAULT NULL,
-                auto_download INT DEFAULT 0
+                auto_download INT DEFAULT 0,
+                tz_offset_sec INT DEFAULT NULL
             )",
             NO_PARAMS,
         )?;
@@ -99,31 +100,44 @@ impl Archive {
         &self.root
     }
 
+    fn parse_row_to_site(row: &Row) -> Result<Site, rusqlite::Error> {
+        let id = row.get_checked(0)?;
+        let name = row.get_checked(1)?;
+        let notes = row.get_checked(3)?;
+        let auto_download = row.get_checked(4)?;
+        let state: Option<StateProv> = row
+            .get_checked::<_, String>(2)
+            .ok()
+            .and_then(|a_string| StateProv::from_str(&a_string).ok());
+
+        let time_zone: Option<FixedOffset> =
+            row.get_checked::<_, i32>(5).ok().map(|offset: i32| {
+                if offset < 0 {
+                    FixedOffset::west(offset.abs())
+                } else {
+                    FixedOffset::east(offset)
+                }
+            });
+
+        Ok(Site {
+            id,
+            name,
+            notes,
+            state,
+            auto_download,
+            time_zone,
+        })
+    }
+
     /// Retrieve a list of sites in the archive.
     pub fn get_sites(&self) -> Result<Vec<Site>, BufkitDataErr> {
         let mut stmt = self
             .db_conn
-            .prepare("SELECT site,name,state,notes,auto_download FROM sites")?;
+            .prepare("SELECT site,name,state,notes,auto_download,tz_offset_sec FROM sites")?;
 
         let vals: Result<Vec<Site>, BufkitDataErr> = stmt
-            .query_map(NO_PARAMS, |row| {
-                let id = row.get(0);
-                let name = row.get(1);
-                let notes = row.get(3);
-                let auto_download = row.get(4);
-                let state: Option<StateProv> = row
-                    .get_checked::<_, String>(2)
-                    .ok()
-                    .and_then(|a_string| StateProv::from_str(&a_string).ok());
-
-                Site {
-                    id,
-                    name,
-                    notes,
-                    state,
-                    auto_download,
-                }
-            })?.map(|res| res.map_err(BufkitDataErr::Database))
+            .query_and_then(NO_PARAMS, Self::parse_row_to_site)?
+            .map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
 
         vals
@@ -131,32 +145,16 @@ impl Archive {
 
     /// Retrieve the information about a single site.
     pub fn get_site_info(&self, site_id: &str) -> Result<Site, BufkitDataErr> {
-        self.db_conn.query_row_and_then(
-            "
-                SELECT site,name,state,notes,auto_download
+        self.db_conn
+            .query_row_and_then(
+                "
+                SELECT site,name,state,notes,auto_download,tz_offset_sec
                 FROM sites
                 WHERE site = ?1
             ",
-            &[&site_id.to_uppercase()],
-            |row| {
-                let id = row.get(0);
-                let name = row.get(1);
-                let notes = row.get(3);
-                let auto_download = row.get(4);
-                let state: Option<StateProv> = row
-                    .get_checked::<_, String>(2)
-                    .ok()
-                    .and_then(|a_string| StateProv::from_str(&a_string).ok());
-
-                Ok(Site {
-                    id,
-                    name,
-                    notes,
-                    state,
-                    auto_download,
-                })
-            },
-        )
+                &[&site_id.to_uppercase()],
+                Self::parse_row_to_site,
+            ).map_err(BufkitDataErr::Database)
     }
 
     /// Modify a sites values.
@@ -164,8 +162,8 @@ impl Archive {
         self.db_conn.execute(
             "
                 UPDATE sites 
-                SET (state, name, notes, auto_download)
-                = (?2, ?3, ?4, ?5)
+                SET (state,name,notes,auto_download,tz_offset_sec)
+                = (?2, ?3, ?4, ?5, ?6)
                 WHERE site = ?1
             ",
             &[
@@ -174,6 +172,7 @@ impl Archive {
                 &site.name,
                 &site.notes,
                 &site.auto_download,
+                &site.time_zone.map(|tz| tz.local_minus_utc()),
             ],
         )?;
 
@@ -183,14 +182,15 @@ impl Archive {
     /// Add a site to the list of sites.
     pub fn add_site(&self, site: &Site) -> Result<(), BufkitDataErr> {
         self.db_conn.execute(
-            "INSERT INTO sites (site, state, name, notes, auto_download)
-                  VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO sites (site, state, name, notes, auto_download, tz_offset_sec)
+                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             &[
                 &site.id.to_uppercase(),
                 &site.state.map(|state_prov| state_prov.as_static()) as &ToSql,
                 &site.name,
                 &site.notes,
                 &site.auto_download,
+                &site.time_zone.map(|tz| tz.local_minus_utc()),
             ],
         )?;
 
@@ -239,6 +239,7 @@ impl Archive {
                 notes: None,
                 state: None,
                 auto_download: false,
+                time_zone: None,
             })?;
         }
 
@@ -270,7 +271,11 @@ impl Archive {
     ) -> Result<String, BufkitDataErr> {
         let file_name: String = self.db_conn.query_row(
             "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[&site_id.to_uppercase() as &ToSql, &model.as_static() as &ToSql, init_time as &ToSql],
+            &[
+                &site_id.to_uppercase() as &ToSql,
+                &model.as_static() as &ToSql,
+                init_time as &ToSql,
+            ],
             |row| row.get_checked(0),
         )??;
 
@@ -372,7 +377,11 @@ impl Archive {
     ) -> Result<bool, BufkitDataErr> {
         let num_records: i32 = self.db_conn.query_row(
             "SELECT COUNT(*) FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[&site_id.to_uppercase() as &ToSql, &model.as_static() as &ToSql, init_time as &ToSql],
+            &[
+                &site_id.to_uppercase() as &ToSql,
+                &model.as_static() as &ToSql,
+                init_time as &ToSql,
+            ],
             |row| row.get_checked(0),
         )??;
 
@@ -423,7 +432,11 @@ impl Archive {
     ) -> Result<(), BufkitDataErr> {
         let file_name: String = self.db_conn.query_row(
             "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[&site_id.to_uppercase() as &ToSql, &model.as_static() as &ToSql, init_time as &ToSql],
+            &[
+                &site_id.to_uppercase() as &ToSql,
+                &model.as_static() as &ToSql,
+                init_time as &ToSql,
+            ],
             |row| row.get_checked(0),
         )??;
 
@@ -431,7 +444,11 @@ impl Archive {
 
         self.db_conn.execute(
             "DELETE FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[&site_id.to_uppercase() as &ToSql, &model.as_static() as &ToSql, init_time as &ToSql],
+            &[
+                &site_id.to_uppercase() as &ToSql,
+                &model.as_static() as &ToSql,
+                init_time as &ToSql,
+            ],
         )?;
 
         Ok(())
@@ -444,7 +461,9 @@ impl Archive {
     pub fn clean_index(&self) -> Result<(isize, Receiver<(isize, Option<String>)>), BufkitDataErr> {
         let count: isize =
             self.db_conn
-                .query_row("SELECT COUNT(rowid) FROM files", NO_PARAMS, |row| row.get(0))?;
+                .query_row("SELECT COUNT(rowid) FROM files", NO_PARAMS, |row| {
+                    row.get(0)
+                })?;
 
         let (tx_main, rx_worker): (Sender<(isize, String)>, Receiver<(_, _)>) = channel();
         let (tx_worker, rx_main): (Sender<(isize, Option<String>)>, Receiver<(_, _)>) = channel();
@@ -706,6 +725,7 @@ mod unit {
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
                 auto_download: false,
+                time_zone: None,
             },
             Site {
                 id: "ksea".to_uppercase(),
@@ -713,6 +733,7 @@ mod unit {
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
                 auto_download: true,
+                time_zone: Some(FixedOffset::west(8 * 3600)),
             },
             Site {
                 id: "kmso".to_uppercase(),
@@ -720,6 +741,7 @@ mod unit {
                 notes: Some("In a valley.".to_owned()),
                 state: None,
                 auto_download: true,
+                time_zone: Some(FixedOffset::west(7 * 3600)),
             },
         ];
 
@@ -751,6 +773,7 @@ mod unit {
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
                 auto_download: false,
+                time_zone: None,
             },
             Site {
                 id: "ksea".to_uppercase(),
@@ -758,6 +781,7 @@ mod unit {
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
                 auto_download: true,
+                time_zone: Some(FixedOffset::west(8 * 3600)),
             },
             Site {
                 id: "kmso".to_uppercase(),
@@ -765,6 +789,7 @@ mod unit {
                 notes: Some("In a valley.".to_owned()),
                 state: None,
                 auto_download: true,
+                time_zone: Some(FixedOffset::west(7 * 3600)),
             },
         ];
 
@@ -787,6 +812,7 @@ mod unit {
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
                 auto_download: false,
+                time_zone: None,
             },
             Site {
                 id: "ksea".to_uppercase(),
@@ -794,13 +820,15 @@ mod unit {
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
                 auto_download: true,
+                time_zone: Some(FixedOffset::west(8 * 3600)),
             },
             Site {
                 id: "kmso".to_uppercase(),
                 name: Some("Missoula".to_owned()),
-                notes: Some("A coastal city with coffe and rain".to_owned()),
+                notes: Some("In a valley.".to_owned()),
                 state: None,
                 auto_download: false,
+                time_zone: None,
             },
         ];
 
@@ -814,6 +842,7 @@ mod unit {
             notes: Some("Mountains, not coast.".to_owned()),
             state: None,
             auto_download: true,
+            time_zone: Some(FixedOffset::west(7 * 3600)),
         };
 
         arch.set_site_info(&zootown).expect("Error updating site.");
