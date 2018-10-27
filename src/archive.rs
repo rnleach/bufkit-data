@@ -551,8 +551,8 @@ impl Archive {
                             if let Some((init_time, model, site)) =
                                 Self::parse_compressed_file_name(&file_name)
                             {
-                                if !arch.site_exists(&site).unwrap() {  
-                                    arch.add_site(&Site{
+                                if !arch.site_exists(&site).unwrap() {
+                                    arch.add_site(&Site {
                                         id: site.clone(),
                                         state: None,
                                         name: None,
