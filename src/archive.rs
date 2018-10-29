@@ -459,8 +459,9 @@ impl Archive {
     /// index.
     ///
     /// Returns a `Vec` of messages about missing files.
-    pub fn clean_archive(&self) -> Result<(JoinHandle<Result<(), BufkitDataErr>>, Receiver<String>), BufkitDataErr> {
-
+    pub fn clean_archive(
+        &self,
+    ) -> Result<(JoinHandle<Result<(), BufkitDataErr>>, Receiver<String>), BufkitDataErr> {
         let (sender, receiver) = channel::<String>();
         let root = self.root.clone();
 
@@ -472,23 +473,26 @@ impl Archive {
                 NO_PARAMS,
             )?;
 
-            let mut del_stmt = arch.db_conn.prepare("DELETE FROM files WHERE file_name = ?1")?;
+            let mut del_stmt = arch
+                .db_conn
+                .prepare("DELETE FROM files WHERE file_name = ?1")?;
             let mut insert_stmt = arch.db_conn.prepare(
-                "INSERT INTO files (site, model, init_time, file_name) VALUES (?1, ?2, ?3, ?4)"
+                "INSERT INTO files (site, model, init_time, file_name) VALUES (?1, ?2, ?3, ?4)",
             )?;
             let mut all_files_stmt = arch.db_conn.prepare("SELECT file_name FROM files")?;
 
-            sender.send("Building set of files from the index.".to_string())
-               .map_err(BufkitDataErr::SenderError)?;
+            sender
+                .send("Building set of files from the index.".to_string())
+                .map_err(BufkitDataErr::SenderError)?;
             let index_vals: Result<HashSet<String>, BufkitDataErr> = all_files_stmt
-                .query_map(NO_PARAMS, |row| -> String {
-                    row.get(0)
-                })?.map(|res| res.map_err(BufkitDataErr::Database))
+                .query_map(NO_PARAMS, |row| -> String { row.get(0) })?
+                .map(|res| res.map_err(BufkitDataErr::Database))
                 .collect();
             let index_vals = index_vals?;
 
-            sender.send("Building set of files from the file system.".to_string())
-               .map_err(BufkitDataErr::SenderError)?;
+            sender
+                .send("Building set of files from the file system.".to_string())
+                .map_err(BufkitDataErr::SenderError)?;
             let file_system_vals: HashSet<String> = read_dir(&arch.data_root)?
                 .filter_map(|de| de.ok())
                 .map(|de| de.path())
@@ -497,22 +501,27 @@ impl Archive {
                 .map(|p| p.to_string_lossy().to_string())
                 .collect();
 
-            sender.send("Comparing sets for files in index but not in the archive.".to_string())
-               .map_err(BufkitDataErr::SenderError)?;
+            sender
+                .send("Comparing sets for files in index but not in the archive.".to_string())
+                .map_err(BufkitDataErr::SenderError)?;
             let files_in_index_but_not_on_file_system = index_vals.difference(&file_system_vals);
 
             for missing_file in files_in_index_but_not_on_file_system {
                 del_stmt.execute(&[missing_file])?;
-                sender.send(format!("Removing {} from index.", missing_file))
+                sender
+                    .send(format!("Removing {} from index.", missing_file))
                     .map_err(BufkitDataErr::SenderError)?;
             }
 
-            sender.send("Comparing sets for files in archive but not in the index.".to_string())
-               .map_err(BufkitDataErr::SenderError)?;
+            sender
+                .send("Comparing sets for files in archive but not in the index.".to_string())
+                .map_err(BufkitDataErr::SenderError)?;
             let files_not_in_index = file_system_vals.difference(&index_vals);
 
             for extra_file in files_not_in_index {
-                let message = if let Some((init_time, model, site)) = Self::parse_compressed_file_name(&extra_file) {
+                let message = if let Some((init_time, model, site)) =
+                    Self::parse_compressed_file_name(&extra_file)
+                {
                     if !arch.site_exists(&site)? {
                         arch.add_site(&Site {
                             id: site.clone(),
@@ -521,21 +530,19 @@ impl Archive {
                             notes: None,
                             auto_download: false,
                             time_zone: None,
-                            })?;
+                        })?;
                     }
-                    match insert_stmt.execute(
-                        &[
-                            &site.to_uppercase() as &ToSql,
-                            &model.as_static() as &ToSql,
-                            &init_time as &ToSql,
-                            &extra_file,
-                        ],
-                    ) {
+                    match insert_stmt.execute(&[
+                        &site.to_uppercase() as &ToSql,
+                        &model.as_static() as &ToSql,
+                        &init_time as &ToSql,
+                        &extra_file,
+                    ]) {
                         Ok(_) => format!("Added {}", extra_file),
                         Err(_) => {
                             remove_file(arch.data_root.join(extra_file))?;
                             format!("Duplicate file removed: {}", extra_file)
-                        },
+                        }
                     }
                 } else {
                     // Remove non-bufkit file
@@ -546,8 +553,9 @@ impl Archive {
                 sender.send(message).map_err(BufkitDataErr::SenderError)?;
             }
 
-            sender.send("Compressing index.".to_string())
-               .map_err(BufkitDataErr::SenderError)?;
+            sender
+                .send("Compressing index.".to_string())
+                .map_err(BufkitDataErr::SenderError)?;
             arch.db_conn.execute("VACUUM", NO_PARAMS)?;
 
             Ok(())
