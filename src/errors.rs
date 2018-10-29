@@ -24,6 +24,9 @@ pub enum BufkitDataErr {
     /// Error forwarded from std
     #[fail(display = "std io error.")]
     IO(#[cause] ::std::io::Error),
+    /// Error sending message...
+    #[fail(display = "other error from std lib")]
+    SenderError(#[cause] ::std::sync::mpsc::SendError<String>),
 
     //
     // Other forwarded errors
