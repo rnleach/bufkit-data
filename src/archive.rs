@@ -3,12 +3,13 @@
 use chrono::{FixedOffset, NaiveDate, NaiveDateTime};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{types::ToSql, Connection, OpenFlags, Row, NO_PARAMS};
-use std::fs::{create_dir, create_dir_all, read_dir, remove_dir_all, remove_file, File};
+use std::collections::HashSet;
+use std::fs::{create_dir, create_dir_all, read_dir, remove_file, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::thread;
+use std::sync::mpsc::{channel, Receiver};
+use std::thread::{self, JoinHandle};
 use strum::AsStaticRef;
 
 use errors::BufkitDataErr;
@@ -440,7 +441,7 @@ impl Archive {
             |row| row.get_checked(0),
         )??;
 
-        remove_file(self.data_root.join(file_name)).map_err(|err| BufkitDataErr::IO(err))?;
+        remove_file(self.data_root.join(file_name)).map_err(BufkitDataErr::IO)?;
 
         self.db_conn.execute(
             "DELETE FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
@@ -458,160 +459,101 @@ impl Archive {
     /// index.
     ///
     /// Returns a `Vec` of messages about missing files.
-    pub fn clean_index(&self) -> Result<(isize, Receiver<(isize, Option<String>)>), BufkitDataErr> {
-        let count: isize =
-            self.db_conn
-                .query_row("SELECT COUNT(rowid) FROM files", NO_PARAMS, |row| {
+    pub fn clean_archive(&self) -> Result<(JoinHandle<Result<(), BufkitDataErr>>, Receiver<String>), BufkitDataErr> {
+
+        let (sender, receiver) = channel::<String>();
+        let root = self.root.clone();
+
+        let jh = thread::spawn(move || -> Result<(), BufkitDataErr> {
+            let arch = Archive::connect(root)?;
+
+            arch.db_conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS fname ON files (file_name)",
+                NO_PARAMS,
+            )?;
+
+            let mut del_stmt = arch.db_conn.prepare("DELETE FROM files WHERE file_name = ?1")?;
+            let mut insert_stmt = arch.db_conn.prepare(
+                "INSERT INTO files (site, model, init_time, file_name) VALUES (?1, ?2, ?3, ?4)"
+            )?;
+            let mut all_files_stmt = arch.db_conn.prepare("SELECT file_name FROM files")?;
+
+            sender.send("Building set of files from the index.".to_string())
+               .map_err(BufkitDataErr::SenderError)?;
+            let index_vals: Result<HashSet<String>, BufkitDataErr> = all_files_stmt
+                .query_map(NO_PARAMS, |row| -> String {
                     row.get(0)
-                })?;
+                })?.map(|res| res.map_err(BufkitDataErr::Database))
+                .collect();
+            let index_vals = index_vals?;
 
-        let (tx_main, rx_worker): (Sender<(isize, String)>, Receiver<(_, _)>) = channel();
-        let (tx_worker, rx_main): (Sender<(isize, Option<String>)>, Receiver<(_, _)>) = channel();
-        let root = self.root.clone();
+            sender.send("Building set of files from the file system.".to_string())
+               .map_err(BufkitDataErr::SenderError)?;
+            let file_system_vals: HashSet<String> = read_dir(&arch.data_root)?
+                .filter_map(|de| de.ok())
+                .map(|de| de.path())
+                .filter(|p| p.is_file())
+                .filter_map(|p| p.file_name().map(|p| p.to_owned()))
+                .map(|p| p.to_string_lossy().to_string())
+                .collect();
 
-        thread::spawn(move || {
-            let arch = Archive::connect(root).unwrap();
-            let mut del_stmt = arch
-                .db_conn
-                .prepare("DELETE FROM files WHERE rowid = ?1")
-                .unwrap();
+            sender.send("Comparing sets for files in index but not in the archive.".to_string())
+               .map_err(BufkitDataErr::SenderError)?;
+            let files_in_index_but_not_on_file_system = index_vals.difference(&file_system_vals);
 
-            for (rowid, fname) in rx_worker.into_iter() {
-                let fname = arch.data_root.join(fname);
-                let check_result = if !fname.as_path().is_file() {
-                    del_stmt.execute(&[&rowid]).unwrap();
-                    (
-                        rowid,
-                        Some(format!("File {} doesn't exist.", fname.to_string_lossy())),
-                    )
-                } else {
-                    (rowid, None)
-                };
-                tx_worker.send(check_result).unwrap();
+            for missing_file in files_in_index_but_not_on_file_system {
+                del_stmt.execute(&[missing_file])?;
+                sender.send(format!("Removing {} from index.", missing_file))
+                    .map_err(BufkitDataErr::SenderError)?;
             }
-        });
 
-        let mut stmt = self
-            .db_conn
-            .prepare("SELECT rowid, file_name FROM files ORDER BY rowid ASC")?;
+            sender.send("Comparing sets for files in archive but not in the index.".to_string())
+               .map_err(BufkitDataErr::SenderError)?;
+            let files_not_in_index = file_system_vals.difference(&index_vals);
 
-        let vals: Result<Vec<(isize, String)>, BufkitDataErr> = stmt
-            .query_map(NO_PARAMS, |row| {
-                let id: isize = row.get(0);
-                let path: String = row.get(1);
-
-                (id, path)
-            })?.map(|res| res.map_err(BufkitDataErr::Database))
-            .collect();
-        let vals = vals?;
-
-        for val in vals {
-            tx_main.send(val).map_err(|_| BufkitDataErr::GeneralError)?;
-        }
-
-        Ok((count, rx_main))
-    }
-
-    /// Search for appropriately named files in the data directory and make sure they are in the
-    /// index. If a file is not appropriately named or if it is a directory, it is deleted.
-    ///
-    /// Returns a `Vec` of messages about added files.
-    pub fn clean_data(&self) -> Result<(usize, Receiver<(usize, Option<String>)>), BufkitDataErr> {
-        self.db_conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS fname ON files (file_name)",
-            NO_PARAMS,
-        )?;
-
-        let root = self.root.clone();
-        let num_entries = read_dir(&self.data_root)?.count();
-        let entries = read_dir(&self.data_root)?;
-
-        let (tx_worker, rx_main) = channel();
-
-        thread::spawn(move || {
-            let arch = Archive::connect(root).unwrap();
-            let mut stmt = arch
-                .db_conn
-                .prepare("SELECT rowid FROM files WHERE file_name = ?1 ")
-                .unwrap();
-
-            for (i, entry) in entries.enumerate() {
-                let entry = entry.unwrap();
-                let file_name = entry.file_name();
-                let file_name = file_name.to_string_lossy();
-                let full_path = entry.path();
-
-                let result = if full_path.is_dir() {
-                    let msg = format!("Removing directory.");
-                    remove_dir_all(&full_path).unwrap();
-                    (i, Some(msg))
-                } else if full_path.is_file() {
-                    if file_name.contains(".buf.gz") {
-                        if !stmt.exists(&[&file_name]).unwrap() {
-                            if let Some((init_time, model, site)) =
-                                Self::parse_compressed_file_name(&file_name)
-                            {
-                                if !arch.site_exists(&site).unwrap() {
-                                    arch.add_site(&Site {
-                                        id: site.clone(),
-                                        state: None,
-                                        name: None,
-                                        notes: None,
-                                        auto_download: false,
-                                        time_zone: None,
-                                    }).unwrap();
-                                }
-
-                                match arch.db_conn.execute(
-                                    "INSERT INTO files (site, model, init_time, file_name)
-                                          VALUES (?1, ?2, ?3, ?4)",
-                                    &[
-                                        &site.to_uppercase() as &ToSql,
-                                        &model.as_static() as &ToSql,
-                                        &init_time as &ToSql,
-                                        &file_name,
-                                    ],
-                                ) {
-                                    Ok(_) => {
-                                        let msg = format!("Added {}", file_name);
-                                        (i, Some(msg))
-                                    }
-                                    Err(_) => {
-                                        let msg = format!("Duplicate File: {}", file_name);
-                                        remove_file(&full_path).unwrap();
-                                        (i, Some(msg))
-                                    }
-                                }
-                            } else {
-                                let msg = format!("Bad File: {}", file_name);
-                                remove_file(&full_path).unwrap();
-                                (i, Some(msg))
-                            }
-                        } else {
-                            (i, None)
-                        }
-                    } else {
-                        let msg = format!("Bad File: {}", file_name);
-                        remove_file(&full_path).unwrap();
-                        (i, Some(msg))
+            for extra_file in files_not_in_index {
+                let message = if let Some((init_time, model, site)) = Self::parse_compressed_file_name(&extra_file) {
+                    if !arch.site_exists(&site)? {
+                        arch.add_site(&Site {
+                            id: site.clone(),
+                            state: None,
+                            name: None,
+                            notes: None,
+                            auto_download: false,
+                            time_zone: None,
+                            })?;
+                    }
+                    match insert_stmt.execute(
+                        &[
+                            &site.to_uppercase() as &ToSql,
+                            &model.as_static() as &ToSql,
+                            &init_time as &ToSql,
+                            &extra_file,
+                        ],
+                    ) {
+                        Ok(_) => format!("Added {}", extra_file),
+                        Err(_) => {
+                            remove_file(arch.data_root.join(extra_file))?;
+                            format!("Duplicate file removed: {}", extra_file)
+                        },
                     }
                 } else {
-                    let msg = format!("Uknown: {}", file_name);
-                    (i, Some(msg))
+                    // Remove non-bufkit file
+                    remove_file(arch.data_root.join(extra_file))?;
+                    format!("Removed non-bufkit file: {}", extra_file)
                 };
 
-                tx_worker.send(result).unwrap()
+                sender.send(message).map_err(BufkitDataErr::SenderError)?;
             }
+
+            sender.send("Compressing index.".to_string())
+               .map_err(BufkitDataErr::SenderError)?;
+            arch.db_conn.execute("VACUUM", NO_PARAMS)?;
+
+            Ok(())
         });
 
-        Ok((num_entries, rx_main))
-    }
-
-    /// Compress the index file. This cleans up and reorganizes the index file.
-    pub fn compress_index(&self) -> Result<(), BufkitDataErr> {
-        self.db_conn.execute("VACUUM", NO_PARAMS)?;
-
-        Ok(())
+        Ok((jh, receiver))
     }
 }
 
