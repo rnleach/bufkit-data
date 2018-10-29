@@ -26,8 +26,10 @@ pub struct Archive {
 }
 
 impl Archive {
-    const DATA_DIR: &'static str = "data";
-    const DB_FILE: &'static str = "index.db";
+
+    // ---------------------------------------------------------------------------------------------
+    // Connecting, creating, and maintaining the archive.
+    // ---------------------------------------------------------------------------------------------
 
     /// Initialize a new archive.
     pub fn create_new<T>(root: T) -> Result<Self, BufkitDataErr>
@@ -41,7 +43,7 @@ impl Archive {
         create_dir_all(&root)?;
         create_dir(&data_root)?; // The folder to store the sounding files.
 
-        // Create and set up the database
+        // Create and set up the archive
         let db_conn = Connection::open_with_flags(
             db_file,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
@@ -86,7 +88,7 @@ impl Archive {
         let db_file = root.as_ref().join(Archive::DB_FILE);
         let root = root.as_ref().to_path_buf();
 
-        // Create and set up the database
+        // Create and set up the archive
         let db_conn = Connection::open_with_flags(db_file, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
 
         Ok(Archive {
@@ -96,10 +98,128 @@ impl Archive {
         })
     }
 
-    /// Retrieve a path to the root. Allows caller to store files in the database.
+    /// Validate files listed in the index are in the archive too, if not remove them from the
+    /// index.
+    ///
+    pub fn clean_archive(
+        &self,
+    ) -> Result<(JoinHandle<Result<(), BufkitDataErr>>, Receiver<String>), BufkitDataErr> {
+        let (sender, receiver) = channel::<String>();
+        let root = self.root.clone();
+
+        let jh = thread::spawn(move || -> Result<(), BufkitDataErr> {
+            let arch = Archive::connect(root)?;
+
+            arch.db_conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS fname ON files (file_name)",
+                NO_PARAMS,
+            )?;
+
+            let mut del_stmt = arch
+                .db_conn
+                .prepare("DELETE FROM files WHERE file_name = ?1")?;
+            let mut insert_stmt = arch.db_conn.prepare(
+                "INSERT INTO files (site, model, init_time, file_name) VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            let mut all_files_stmt = arch.db_conn.prepare("SELECT file_name FROM files")?;
+
+            sender
+                .send("Building set of files from the index.".to_string())
+                .map_err(BufkitDataErr::SenderError)?;
+            let index_vals: Result<HashSet<String>, BufkitDataErr> = all_files_stmt
+                .query_map(NO_PARAMS, |row| -> String { row.get(0) })?
+                .map(|res| res.map_err(BufkitDataErr::Database))
+                .collect();
+            let index_vals = index_vals?;
+
+            sender
+                .send("Building set of files from the file system.".to_string())
+                .map_err(BufkitDataErr::SenderError)?;
+            let file_system_vals: HashSet<String> = read_dir(&arch.data_root)?
+                .filter_map(|de| de.ok())
+                .map(|de| de.path())
+                .filter(|p| p.is_file())
+                .filter_map(|p| p.file_name().map(|p| p.to_owned()))
+                .map(|p| p.to_string_lossy().to_string())
+                .collect();
+
+            sender
+                .send("Comparing sets for files in index but not in the archive.".to_string())
+                .map_err(BufkitDataErr::SenderError)?;
+            let files_in_index_but_not_on_file_system = index_vals.difference(&file_system_vals);
+
+            for missing_file in files_in_index_but_not_on_file_system {
+                del_stmt.execute(&[missing_file])?;
+                sender
+                    .send(format!("Removing {} from index.", missing_file))
+                    .map_err(BufkitDataErr::SenderError)?;
+            }
+
+            sender
+                .send("Comparing sets for files in archive but not in the index.".to_string())
+                .map_err(BufkitDataErr::SenderError)?;
+            let files_not_in_index = file_system_vals.difference(&index_vals);
+
+            for extra_file in files_not_in_index {
+                let message = if let Some((init_time, model, site)) =
+                    Self::parse_compressed_file_name(&extra_file)
+                {
+                    if !arch.site_exists(&site)? {
+                        arch.add_site(&Site {
+                            id: site.clone(),
+                            state: None,
+                            name: None,
+                            notes: None,
+                            auto_download: false,
+                            time_zone: None,
+                        })?;
+                    }
+                    match insert_stmt.execute(&[
+                        &site.to_uppercase() as &ToSql,
+                        &model.as_static() as &ToSql,
+                        &init_time as &ToSql,
+                        &extra_file,
+                    ]) {
+                        Ok(_) => format!("Added {}", extra_file),
+                        Err(_) => {
+                            remove_file(arch.data_root.join(extra_file))?;
+                            format!("Duplicate file removed: {}", extra_file)
+                        }
+                    }
+                } else {
+                    // Remove non-bufkit file
+                    remove_file(arch.data_root.join(extra_file))?;
+                    format!("Removed non-bufkit file: {}", extra_file)
+                };
+
+                sender.send(message).map_err(BufkitDataErr::SenderError)?;
+            }
+
+            sender
+                .send("Compressing index.".to_string())
+                .map_err(BufkitDataErr::SenderError)?;
+            arch.db_conn.execute("VACUUM", NO_PARAMS)?;
+
+            Ok(())
+        });
+
+        Ok((jh, receiver))
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The file system aspects of the archive, e.g. the root directory of the archive
+    // ---------------------------------------------------------------------------------------------
+    const DATA_DIR: &'static str = "data";
+    const DB_FILE: &'static str = "index.db";
+
+    /// Retrieve a path to the root. Allows caller to store files in the archive.
     pub fn get_root(&self) -> &Path {
         &self.root
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Query or modify site metadata
+    // ---------------------------------------------------------------------------------------------
 
     fn parse_row_to_site(row: &Row) -> Result<Site, rusqlite::Error> {
         let id = row.get_checked(0)?;
@@ -209,7 +329,46 @@ impl Archive {
         Ok(number == 1)
     }
 
-    /// Get a list of models in the database for this site.
+    // ---------------------------------------------------------------------------------------------
+    // Query archive inventory
+    // ---------------------------------------------------------------------------------------------
+
+    /// Get a list of all the available model initialization times for a given site and model.
+    pub fn get_init_times(
+        &self,
+        site_id: &str,
+        model: Model,
+    ) -> Result<Vec<NaiveDateTime>, BufkitDataErr> {
+        let mut stmt = self.db_conn.prepare(
+            "
+                SELECT init_time FROM files 
+                WHERE site = ?1 AND model = ?2
+                ORDER BY init_time ASC
+            ",
+        )?;
+
+        let init_times: Result<Vec<Result<NaiveDateTime, _>>, BufkitDataErr> = stmt
+            .query_map(&[&site_id.to_uppercase(), model.as_static()], |row| {
+                row.get_checked(0)
+            })?.map(|res| res.map_err(BufkitDataErr::Database))
+            .collect();
+
+        let init_times: Vec<NaiveDateTime> =
+            init_times?.into_iter().filter_map(|res| res.ok()).collect();
+
+        Ok(init_times)
+    }
+
+    /// Get an inventory of soundings for a site & model.
+    pub fn get_inventory(&self, site_id: &str, model: Model) -> Result<Inventory, BufkitDataErr> {
+        let init_times = self.get_init_times(site_id, model)?;
+
+        let site = &self.get_site_info(site_id)?;
+
+        Inventory::new(init_times, model, site)
+    }
+
+    /// Get a list of models in the archive for this site.
     pub fn models_for_site(&self, site_id: &str) -> Result<Vec<Model>, BufkitDataErr> {
         let mut stmt = self
             .db_conn
@@ -224,6 +383,54 @@ impl Archive {
 
         vals
     }
+
+    /// Retrieve the model initialization time of the most recent model in the archive.
+    pub fn get_most_recent_valid_time(
+        &self,
+        site_id: &str,
+        model: Model,
+    ) -> Result<NaiveDateTime, BufkitDataErr> {
+        let init_time: NaiveDateTime = self.db_conn.query_row(
+            "
+                SELECT init_time FROM files 
+                WHERE site = ?1 AND model = ?2
+                ORDER BY init_time DESC
+                LIMIT 1
+            ",
+            &[&site_id.to_uppercase(), model.as_static()],
+            |row| row.get_checked(0),
+        )??;
+
+        Ok(init_time)
+    }
+
+    /// Check to see if a file is present in the archive and it is retrieveable.
+    pub fn exists(
+        &self,
+        site_id: &str,
+        model: Model,
+        init_time: &NaiveDateTime,
+    ) -> Result<bool, BufkitDataErr> {
+        let num_records: i32 = self.db_conn.query_row(
+            "SELECT COUNT(*) FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
+            &[
+                &site_id.to_uppercase() as &ToSql,
+                &model.as_static() as &ToSql,
+                init_time as &ToSql,
+            ],
+            |row| row.get_checked(0),
+        )??;
+
+        Ok(num_records == 1)
+    }
+
+    // TODO: get the total number of files in the archive.
+
+    // TODO: get the site, model, and init_time of every file in the archive
+
+    // ---------------------------------------------------------------------------------------------
+    // Add, remove, and retrieve files from the archive
+    // ---------------------------------------------------------------------------------------------
 
     /// Add a bufkit file to the archive.
     pub fn add_file(
@@ -285,26 +492,6 @@ impl Archive {
         let mut s = String::new();
         decoder.read_to_string(&mut s)?;
         Ok(s)
-    }
-
-    /// Retrieve the model initialization time of the most recent model in the archive.
-    pub fn get_most_recent_valid_time(
-        &self,
-        site_id: &str,
-        model: Model,
-    ) -> Result<NaiveDateTime, BufkitDataErr> {
-        let init_time: NaiveDateTime = self.db_conn.query_row(
-            "
-                SELECT init_time FROM files 
-                WHERE site = ?1 AND model = ?2
-                ORDER BY init_time DESC
-                LIMIT 1
-            ",
-            &[&site_id.to_uppercase(), model.as_static()],
-            |row| row.get_checked(0),
-        )??;
-
-        Ok(init_time)
     }
 
     /// Retrieve the  most recent file
@@ -369,61 +556,6 @@ impl Archive {
         )
     }
 
-    /// Check to see if a file is present in the archive and it is retrieveable.
-    pub fn exists(
-        &self,
-        site_id: &str,
-        model: Model,
-        init_time: &NaiveDateTime,
-    ) -> Result<bool, BufkitDataErr> {
-        let num_records: i32 = self.db_conn.query_row(
-            "SELECT COUNT(*) FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
-            &[
-                &site_id.to_uppercase() as &ToSql,
-                &model.as_static() as &ToSql,
-                init_time as &ToSql,
-            ],
-            |row| row.get_checked(0),
-        )??;
-
-        Ok(num_records == 1)
-    }
-
-    /// Get a list of all the available model initialization times for a given site and model.
-    pub fn get_init_times(
-        &self,
-        site_id: &str,
-        model: Model,
-    ) -> Result<Vec<NaiveDateTime>, BufkitDataErr> {
-        let mut stmt = self.db_conn.prepare(
-            "
-                SELECT init_time FROM files 
-                WHERE site = ?1 AND model = ?2
-                ORDER BY init_time ASC
-            ",
-        )?;
-
-        let init_times: Result<Vec<Result<NaiveDateTime, _>>, BufkitDataErr> = stmt
-            .query_map(&[&site_id.to_uppercase(), model.as_static()], |row| {
-                row.get_checked(0)
-            })?.map(|res| res.map_err(BufkitDataErr::Database))
-            .collect();
-
-        let init_times: Vec<NaiveDateTime> =
-            init_times?.into_iter().filter_map(|res| res.ok()).collect();
-
-        Ok(init_times)
-    }
-
-    /// Get an inventory of soundings for a site & model.
-    pub fn get_inventory(&self, site_id: &str, model: Model) -> Result<Inventory, BufkitDataErr> {
-        let init_times = self.get_init_times(site_id, model)?;
-
-        let site = &self.get_site_info(site_id)?;
-
-        Inventory::new(init_times, model, site)
-    }
-
     /// Remove a file from the archive.
     pub fn remove_file(
         &self,
@@ -453,115 +585,6 @@ impl Archive {
         )?;
 
         Ok(())
-    }
-
-    /// Validate files listed in the index are in the archive too, if not remove them from the
-    /// index.
-    ///
-    /// Returns a `Vec` of messages about missing files.
-    pub fn clean_archive(
-        &self,
-    ) -> Result<(JoinHandle<Result<(), BufkitDataErr>>, Receiver<String>), BufkitDataErr> {
-        let (sender, receiver) = channel::<String>();
-        let root = self.root.clone();
-
-        let jh = thread::spawn(move || -> Result<(), BufkitDataErr> {
-            let arch = Archive::connect(root)?;
-
-            arch.db_conn.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS fname ON files (file_name)",
-                NO_PARAMS,
-            )?;
-
-            let mut del_stmt = arch
-                .db_conn
-                .prepare("DELETE FROM files WHERE file_name = ?1")?;
-            let mut insert_stmt = arch.db_conn.prepare(
-                "INSERT INTO files (site, model, init_time, file_name) VALUES (?1, ?2, ?3, ?4)",
-            )?;
-            let mut all_files_stmt = arch.db_conn.prepare("SELECT file_name FROM files")?;
-
-            sender
-                .send("Building set of files from the index.".to_string())
-                .map_err(BufkitDataErr::SenderError)?;
-            let index_vals: Result<HashSet<String>, BufkitDataErr> = all_files_stmt
-                .query_map(NO_PARAMS, |row| -> String { row.get(0) })?
-                .map(|res| res.map_err(BufkitDataErr::Database))
-                .collect();
-            let index_vals = index_vals?;
-
-            sender
-                .send("Building set of files from the file system.".to_string())
-                .map_err(BufkitDataErr::SenderError)?;
-            let file_system_vals: HashSet<String> = read_dir(&arch.data_root)?
-                .filter_map(|de| de.ok())
-                .map(|de| de.path())
-                .filter(|p| p.is_file())
-                .filter_map(|p| p.file_name().map(|p| p.to_owned()))
-                .map(|p| p.to_string_lossy().to_string())
-                .collect();
-
-            sender
-                .send("Comparing sets for files in index but not in the archive.".to_string())
-                .map_err(BufkitDataErr::SenderError)?;
-            let files_in_index_but_not_on_file_system = index_vals.difference(&file_system_vals);
-
-            for missing_file in files_in_index_but_not_on_file_system {
-                del_stmt.execute(&[missing_file])?;
-                sender
-                    .send(format!("Removing {} from index.", missing_file))
-                    .map_err(BufkitDataErr::SenderError)?;
-            }
-
-            sender
-                .send("Comparing sets for files in archive but not in the index.".to_string())
-                .map_err(BufkitDataErr::SenderError)?;
-            let files_not_in_index = file_system_vals.difference(&index_vals);
-
-            for extra_file in files_not_in_index {
-                let message = if let Some((init_time, model, site)) =
-                    Self::parse_compressed_file_name(&extra_file)
-                {
-                    if !arch.site_exists(&site)? {
-                        arch.add_site(&Site {
-                            id: site.clone(),
-                            state: None,
-                            name: None,
-                            notes: None,
-                            auto_download: false,
-                            time_zone: None,
-                        })?;
-                    }
-                    match insert_stmt.execute(&[
-                        &site.to_uppercase() as &ToSql,
-                        &model.as_static() as &ToSql,
-                        &init_time as &ToSql,
-                        &extra_file,
-                    ]) {
-                        Ok(_) => format!("Added {}", extra_file),
-                        Err(_) => {
-                            remove_file(arch.data_root.join(extra_file))?;
-                            format!("Duplicate file removed: {}", extra_file)
-                        }
-                    }
-                } else {
-                    // Remove non-bufkit file
-                    remove_file(arch.data_root.join(extra_file))?;
-                    format!("Removed non-bufkit file: {}", extra_file)
-                };
-
-                sender.send(message).map_err(BufkitDataErr::SenderError)?;
-            }
-
-            sender
-                .send("Compressing index.".to_string())
-                .map_err(BufkitDataErr::SenderError)?;
-            arch.db_conn.execute("VACUUM", NO_PARAMS)?;
-
-            Ok(())
-        });
-
-        Ok((jh, receiver))
     }
 }
 
