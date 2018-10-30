@@ -32,7 +32,7 @@ impl Archive {
     // ---------------------------------------------------------------------------------------------
 
     /// Initialize a new archive.
-    pub fn create_new<T>(root: T) -> Result<Self, BufkitDataErr>
+    pub fn create<T>(root: T) -> Result<Self, BufkitDataErr>
     where
         T: AsRef<Path>,
     {
@@ -101,7 +101,7 @@ impl Archive {
     /// Validate files listed in the index are in the archive too, if not remove them from the
     /// index.
     ///
-    pub fn clean_archive(
+    pub fn clean(
         &self,
     ) -> Result<(JoinHandle<Result<(), BufkitDataErr>>, Receiver<String>), BufkitDataErr> {
         let (sender, receiver) = channel::<String>();
@@ -213,7 +213,7 @@ impl Archive {
     const DB_FILE: &'static str = "index.db";
 
     /// Retrieve a path to the root. Allows caller to store files in the archive.
-    pub fn get_root(&self) -> &Path {
+    pub fn root(&self) -> &Path {
         &self.root
     }
 
@@ -251,7 +251,7 @@ impl Archive {
     }
 
     /// Retrieve a list of sites in the archive.
-    pub fn get_sites(&self) -> Result<Vec<Site>, BufkitDataErr> {
+    pub fn sites(&self) -> Result<Vec<Site>, BufkitDataErr> {
         let mut stmt = self
             .db_conn
             .prepare("SELECT site,name,state,notes,auto_download,tz_offset_sec FROM sites")?;
@@ -265,7 +265,7 @@ impl Archive {
     }
 
     /// Retrieve the information about a single site.
-    pub fn get_site_info(&self, site_id: &str) -> Result<Site, BufkitDataErr> {
+    pub fn site_info(&self, site_id: &str) -> Result<Site, BufkitDataErr> {
         self.db_conn
             .query_row_and_then(
                 "
@@ -334,7 +334,7 @@ impl Archive {
     // ---------------------------------------------------------------------------------------------
 
     /// Get a list of all the available model initialization times for a given site and model.
-    pub fn get_init_times(
+    pub fn init_times(
         &self,
         site_id: &str,
         model: Model,
@@ -360,16 +360,16 @@ impl Archive {
     }
 
     /// Get an inventory of soundings for a site & model.
-    pub fn get_inventory(&self, site_id: &str, model: Model) -> Result<Inventory, BufkitDataErr> {
-        let init_times = self.get_init_times(site_id, model)?;
+    pub fn inventory(&self, site_id: &str, model: Model) -> Result<Inventory, BufkitDataErr> {
+        let init_times = self.init_times(site_id, model)?;
 
-        let site = &self.get_site_info(site_id)?;
+        let site = &self.site_info(site_id)?;
 
         Inventory::new(init_times, model, site)
     }
 
     /// Get a list of models in the archive for this site.
-    pub fn models_for_site(&self, site_id: &str) -> Result<Vec<Model>, BufkitDataErr> {
+    pub fn models(&self, site_id: &str) -> Result<Vec<Model>, BufkitDataErr> {
         let mut stmt = self
             .db_conn
             .prepare("SELECT DISTINCT model FROM files WHERE site = ?1")?;
@@ -385,7 +385,7 @@ impl Archive {
     }
 
     /// Retrieve the model initialization time of the most recent model in the archive.
-    pub fn get_most_recent_valid_time(
+    pub fn most_recent_valid_time(
         &self,
         site_id: &str,
         model: Model,
@@ -405,7 +405,7 @@ impl Archive {
     }
 
     /// Check to see if a file is present in the archive and it is retrieveable.
-    pub fn exists(
+    pub fn file_exists(
         &self,
         site_id: &str,
         model: Model,
@@ -433,7 +433,7 @@ impl Archive {
     // ---------------------------------------------------------------------------------------------
 
     /// Add a bufkit file to the archive.
-    pub fn add_file(
+    pub fn add(
         &self,
         site_id: &str,
         model: Model,
@@ -471,7 +471,7 @@ impl Archive {
     }
 
     /// Retrieve a file from the archive.
-    pub fn get_file(
+    pub fn retrieve(
         &self,
         site_id: &str,
         model: Model,
@@ -495,13 +495,13 @@ impl Archive {
     }
 
     /// Retrieve the  most recent file
-    pub fn get_most_recent_file(
+    pub fn most_recent_file(
         &self,
         site_id: &str,
         model: Model,
     ) -> Result<String, BufkitDataErr> {
-        let init_time = self.get_most_recent_valid_time(site_id, model)?;
-        self.get_file(site_id, model, &init_time)
+        let init_time = self.most_recent_valid_time(site_id, model)?;
+        self.retrieve(site_id, model, &init_time)
     }
 
     fn compressed_file_name(
@@ -557,7 +557,7 @@ impl Archive {
     }
 
     /// Remove a file from the archive.
-    pub fn remove_file(
+    pub fn remove(
         &self,
         site_id: &str,
         model: Model,
@@ -611,7 +611,7 @@ mod unit {
     // Function to create a new archive to test.
     fn create_test_archive() -> Result<TestArchive, BufkitDataErr> {
         let tmp = TempDir::new("bufkit-data-test-archive")?;
-        let arch = Archive::create_new(tmp.path())?;
+        let arch = Archive::create(tmp.path())?;
 
         Ok(TestArchive { tmp, arch })
     }
@@ -668,7 +668,7 @@ mod unit {
         let test_data = get_test_data().expect("Error loading test data.");
 
         for (site, model, init_time, raw_data) in test_data {
-            arch.add_file(&site, model, &init_time, &raw_data)?;
+            arch.add(&site, model, &init_time, &raw_data)?;
         }
         Ok(())
     }
@@ -693,7 +693,7 @@ mod unit {
         let TestArchive { tmp, arch } =
             create_test_archive().expect("Failed to create test archive.");
 
-        let root = arch.get_root();
+        let root = arch.root();
         assert_eq!(root, tmp.path());
     }
 
@@ -737,7 +737,7 @@ mod unit {
         assert!(arch.site_exists("kord").expect("Error checking existence"));
         assert!(!arch.site_exists("xyz").expect("Error checking existence"));
 
-        let retrieved_sites = arch.get_sites().expect("Error retrieving sites.");
+        let retrieved_sites = arch.sites().expect("Error retrieving sites.");
 
         for site in retrieved_sites {
             println!("{:#?}", site);
@@ -781,7 +781,7 @@ mod unit {
             arch.add_site(site).expect("Error adding site.");
         }
 
-        assert_eq!(arch.get_site_info("ksea").unwrap(), test_sites[1]);
+        assert_eq!(arch.site_info("ksea").unwrap(), test_sites[1]);
     }
 
     #[test]
@@ -831,8 +831,8 @@ mod unit {
 
         arch.set_site_info(&zootown).expect("Error updating site.");
 
-        assert_eq!(arch.get_site_info("kmso").unwrap(), zootown);
-        assert_ne!(arch.get_site_info("kmso").unwrap(), test_sites[2]);
+        assert_eq!(arch.site_info("kmso").unwrap(), zootown);
+        assert_ne!(arch.site_info("kmso").unwrap(), test_sites[2]);
     }
 
     #[test]
@@ -843,10 +843,10 @@ mod unit {
         let test_data = get_test_data().expect("Error loading test data.");
 
         for (site, model, init_time, raw_data) in test_data {
-            arch.add_file(&site, model, &init_time, &raw_data)
+            arch.add(&site, model, &init_time, &raw_data)
                 .expect("Failure to add.");
             let recovered_str = arch
-                .get_file(&site, model, &init_time)
+                .retrieve(&site, model, &init_time)
                 .expect("Failure to load.");
 
             assert!(raw_data == recovered_str);
@@ -863,17 +863,17 @@ mod unit {
         fill_test_archive(&mut arch).expect("Error filling test archive.");
 
         let init_time = arch
-            .get_most_recent_valid_time("kmso", Model::GFS)
+            .most_recent_valid_time("kmso", Model::GFS)
             .expect("Error getting valid time.");
 
         assert_eq!(init_time, NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0));
 
-        arch.get_most_recent_file("kmso", Model::GFS)
+        arch.most_recent_file("kmso", Model::GFS)
             .expect("Failed to retrieve sounding.");
     }
 
     #[test]
-    fn test_exists() {
+    fn test_file_exists() {
         let TestArchive {
             tmp: _tmp,
             mut arch,
@@ -883,28 +883,28 @@ mod unit {
 
         println!("Checking for files that should exist.");
         assert!(
-            arch.exists(
+            arch.file_exists(
                 "kmso",
                 Model::GFS,
                 &NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0)
             ).expect("Error checking for existence")
         );
         assert!(
-            arch.exists(
+            arch.file_exists(
                 "kmso",
                 Model::GFS,
                 &NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0)
             ).expect("Error checking for existence")
         );
         assert!(
-            arch.exists(
+            arch.file_exists(
                 "kmso",
                 Model::GFS,
                 &NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0)
             ).expect("Error checking for existence")
         );
         assert!(
-            arch.exists(
+            arch.file_exists(
                 "kmso",
                 Model::GFS,
                 &NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0)
@@ -913,32 +913,28 @@ mod unit {
 
         println!("Checking for files that should NOT exist.");
         assert!(
-            !arch
-                .exists(
+            !arch.file_exists(
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(0, 0, 0)
                 ).expect("Error checking for existence")
         );
         assert!(
-            !arch
-                .exists(
+            !arch.file_exists(
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(6, 0, 0)
                 ).expect("Error checking for existence")
         );
         assert!(
-            !arch
-                .exists(
+            !arch.file_exists(
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(12, 0, 0)
                 ).expect("Error checking for existence")
         );
         assert!(
-            !arch
-                .exists(
+            !arch.file_exists(
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(18, 0, 0)
@@ -956,7 +952,7 @@ mod unit {
         fill_test_archive(&mut arch).expect("Error filling test archive.");
 
         let models = arch
-            .models_for_site("kmso")
+            .models("kmso")
             .expect("Error querying archive.");
 
         assert!(models.contains(&Model::GFS));
@@ -988,7 +984,7 @@ mod unit {
             missing,
             auto_download: false, // this is the default value
         };
-        assert_eq!(arch.get_inventory("kmso", Model::NAM).unwrap(), expected);
+        assert_eq!(arch.inventory("kmso", Model::NAM).unwrap(), expected);
     }
 
     #[test]
@@ -1005,14 +1001,14 @@ mod unit {
         let site = "kmso";
 
         assert!(
-            arch.exists(site, model, &init_time)
+            arch.file_exists(site, model, &init_time)
                 .expect("Error checking db")
         );
-        arch.remove_file(site, model, &init_time)
+        arch.remove(site, model, &init_time)
             .expect("Error while removing.");
         assert!(
             !arch
-                .exists(site, model, &init_time)
+                .file_exists(site, model, &init_time)
                 .expect("Error checking db")
         );
     }

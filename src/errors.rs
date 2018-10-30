@@ -36,7 +36,10 @@ pub enum BufkitDataErr {
     Database(#[cause] ::rusqlite::Error),
     /// A general error forwarded with the failure crate
     #[fail(display = "General error forwarded.")]
-    GeneralError,
+    GeneralError(Box<failure::Error>),
+    /// Error forwarded from the strum crate
+    #[fail(display = "Error from strum crate")]
+    StrumError(Box<failure::Error>),
 
     //
     // My own errors from this crate
@@ -50,8 +53,8 @@ pub enum BufkitDataErr {
 }
 
 impl From<failure::Error> for BufkitDataErr {
-    fn from(_: failure::Error) -> BufkitDataErr {
-        BufkitDataErr::GeneralError
+    fn from(err: failure::Error) -> BufkitDataErr {
+        BufkitDataErr::GeneralError(Box::new(err))
     }
 }
 
@@ -80,7 +83,7 @@ impl From<::rusqlite::Error> for BufkitDataErr {
 }
 
 impl From<ParseError> for BufkitDataErr {
-    fn from(_err: ParseError) -> BufkitDataErr {
-        BufkitDataErr::GeneralError
+    fn from(err: ParseError) -> BufkitDataErr {
+        BufkitDataErr::StrumError(Box::new(failure::Error::from(err)))
     }
 }
