@@ -1,7 +1,7 @@
 use chrono::FixedOffset;
 
 /// Description of a site with a sounding.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Site {
     /// Site id, usually a 3 or 4 letter identifier (e.g. kord katl ksea).
     pub id: String,
