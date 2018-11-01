@@ -26,7 +26,6 @@ pub struct Archive {
 }
 
 impl Archive {
-
     // ---------------------------------------------------------------------------------------------
     // Connecting, creating, and maintaining the archive.
     // ---------------------------------------------------------------------------------------------
@@ -361,7 +360,6 @@ impl Archive {
 
     /// Get the number of values files in the archive for the model and intitialization time.
     pub fn count_init_times(&self, site_id: &str, model: Model) -> Result<i64, BufkitDataErr> {
-
         let num_records: i64 = self.db_conn.query_row(
             "
                 SELECT COUNT(init_time) FROM files 
@@ -441,11 +439,11 @@ impl Archive {
 
     /// Get the number of files stored in the archive.
     pub fn count(&self) -> Result<i64, BufkitDataErr> {
-        let num_records: i64 = self.db_conn.query_row(
-            "SELECT COUNT(*) FROM files",
-            NO_PARAMS,
-            |row| row.get_checked(0),
-        )??;
+        let num_records: i64 =
+            self.db_conn
+                .query_row("SELECT COUNT(*) FROM files", NO_PARAMS, |row| {
+                    row.get_checked(0)
+                })??;
 
         Ok(num_records)
     }
@@ -517,11 +515,7 @@ impl Archive {
     }
 
     /// Retrieve the  most recent file
-    pub fn most_recent_file(
-        &self,
-        site_id: &str,
-        model: Model,
-    ) -> Result<String, BufkitDataErr> {
+    pub fn most_recent_file(&self, site_id: &str, model: Model) -> Result<String, BufkitDataErr> {
         let init_time = self.most_recent_valid_time(site_id, model)?;
         self.retrieve(site_id, model, &init_time)
     }
@@ -878,9 +872,7 @@ mod unit {
 
         fill_test_archive(&mut arch).expect("Error filling test archive.");
 
-        let models = arch
-            .models("kmso")
-            .expect("Error querying archive.");
+        let models = arch.models("kmso").expect("Error querying archive.");
 
         assert!(models.contains(&Model::GFS));
         assert!(models.contains(&Model::NAM));
@@ -915,7 +907,7 @@ mod unit {
     }
 
     #[test]
-    fn test_count(){
+    fn test_count() {
         let TestArchive {
             tmp: _tmp,
             mut arch,
@@ -928,7 +920,7 @@ mod unit {
     }
 
     #[test]
-    fn test_count_init_times(){
+    fn test_count_init_times() {
         let TestArchive {
             tmp: _tmp,
             mut arch,
@@ -936,8 +928,14 @@ mod unit {
 
         fill_test_archive(&mut arch).expect("Error filling test archive.");
 
-        assert_eq!(arch.count_init_times("kmso", Model::GFS).expect("db error"), 4);
-        assert_eq!(arch.count_init_times("kmso", Model::NAM).expect("db error"), 3);
+        assert_eq!(
+            arch.count_init_times("kmso", Model::GFS).expect("db error"),
+            4
+        );
+        assert_eq!(
+            arch.count_init_times("kmso", Model::NAM).expect("db error"),
+            3
+        );
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -1021,28 +1019,32 @@ mod unit {
 
         println!("Checking for files that should NOT exist.");
         assert!(
-            !arch.file_exists(
+            !arch
+                .file_exists(
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(0, 0, 0)
                 ).expect("Error checking for existence")
         );
         assert!(
-            !arch.file_exists(
+            !arch
+                .file_exists(
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(6, 0, 0)
                 ).expect("Error checking for existence")
         );
         assert!(
-            !arch.file_exists(
+            !arch
+                .file_exists(
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(12, 0, 0)
                 ).expect("Error checking for existence")
         );
         assert!(
-            !arch.file_exists(
+            !arch
+                .file_exists(
                     "kmso",
                     Model::GFS,
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(18, 0, 0)
