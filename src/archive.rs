@@ -673,6 +673,9 @@ mod unit {
         Ok(())
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Connecting, creating, and maintaining the archive.
+    // ---------------------------------------------------------------------------------------------
     #[test]
     fn test_archive_create_new() {
         assert!(create_test_archive().is_ok());
@@ -688,6 +691,9 @@ mod unit {
         assert!(Archive::connect("unlikely_directory_in_my_project").is_err());
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // The file system aspects of the archive, e.g. the root directory of the archive
+    // ---------------------------------------------------------------------------------------------
     #[test]
     fn test_get_root() {
         let TestArchive { tmp, arch } =
@@ -697,6 +703,9 @@ mod unit {
         assert_eq!(root, tmp.path());
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Query or modify site metadata
+    // ---------------------------------------------------------------------------------------------
     #[test]
     fn test_sites_round_trip() {
         let TestArchive { tmp: _tmp, arch } =
@@ -835,6 +844,57 @@ mod unit {
         assert_ne!(arch.site_info("kmso").unwrap(), test_sites[2]);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Query archive inventory
+    // ---------------------------------------------------------------------------------------------
+    #[test]
+    fn test_models_for_site() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch).expect("Error filling test archive.");
+
+        let models = arch
+            .models("kmso")
+            .expect("Error querying archive.");
+
+        assert!(models.contains(&Model::GFS));
+        assert!(models.contains(&Model::NAM));
+        assert!(!models.contains(&Model::NAM4KM));
+        assert!(!models.contains(&Model::LocalWrf));
+        assert!(!models.contains(&Model::Other));
+    }
+
+    #[test]
+    fn test_inventory() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch).expect("Error filling test archive.");
+
+        let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
+        let missing = vec![(
+            NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0),
+            NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0),
+        )];
+
+        let expected = Inventory {
+            first,
+            last,
+            missing,
+            auto_download: false, // this is the default value
+        };
+        assert_eq!(arch.inventory("kmso", Model::NAM).unwrap(), expected);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Add, remove, and retrieve files from the archive
+    // ---------------------------------------------------------------------------------------------
     #[test]
     fn test_files_round_trip() {
         let TestArchive { tmp: _tmp, arch } =
@@ -940,51 +1000,6 @@ mod unit {
                     &NaiveDate::from_ymd(2018, 4, 1).and_hms(18, 0, 0)
                 ).expect("Error checking for existence")
         );
-    }
-
-    #[test]
-    fn test_models_for_site() {
-        let TestArchive {
-            tmp: _tmp,
-            mut arch,
-        } = create_test_archive().expect("Failed to create test archive.");
-
-        fill_test_archive(&mut arch).expect("Error filling test archive.");
-
-        let models = arch
-            .models("kmso")
-            .expect("Error querying archive.");
-
-        assert!(models.contains(&Model::GFS));
-        assert!(models.contains(&Model::NAM));
-        assert!(!models.contains(&Model::NAM4KM));
-        assert!(!models.contains(&Model::LocalWrf));
-        assert!(!models.contains(&Model::Other));
-    }
-
-    #[test]
-    fn test_inventory() {
-        let TestArchive {
-            tmp: _tmp,
-            mut arch,
-        } = create_test_archive().expect("Failed to create test archive.");
-
-        fill_test_archive(&mut arch).expect("Error filling test archive.");
-
-        let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
-        let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
-        let missing = vec![(
-            NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0),
-            NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0),
-        )];
-
-        let expected = Inventory {
-            first,
-            last,
-            missing,
-            auto_download: false, // this is the default value
-        };
-        assert_eq!(arch.inventory("kmso", Model::NAM).unwrap(), expected);
     }
 
     #[test]
