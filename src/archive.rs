@@ -359,6 +359,21 @@ impl Archive {
         Ok(init_times)
     }
 
+    /// Get the number of values files in the archive for the model and intitialization time.
+    pub fn count_init_times(&self, site_id: &str, model: Model) -> Result<i64, BufkitDataErr> {
+
+        let num_records: i64 = self.db_conn.query_row(
+            "
+                SELECT COUNT(init_time) FROM files 
+                WHERE site = ?1 AND model = ?2
+            ",
+            &[&site_id.to_uppercase(), model.as_static()],
+            |row| row.get_checked(0),
+        )??;
+
+        Ok(num_records)
+    }
+
     /// Get an inventory of soundings for a site & model.
     pub fn inventory(&self, site_id: &str, model: Model) -> Result<Inventory, BufkitDataErr> {
         let init_times = self.init_times(site_id, model)?;
@@ -424,9 +439,16 @@ impl Archive {
         Ok(num_records == 1)
     }
 
-    // TODO: get the total number of files in the archive.
+    /// Get the number of files stored in the archive.
+    pub fn count(&self) -> Result<i64, BufkitDataErr> {
+        let num_records: i64 = self.db_conn.query_row(
+            "SELECT COUNT(*) FROM files",
+            NO_PARAMS,
+            |row| row.get_checked(0),
+        )??;
 
-    // TODO: get the site, model, and init_time of every file in the archive
+        Ok(num_records)
+    }
 
     // ---------------------------------------------------------------------------------------------
     // Add, remove, and retrieve files from the archive
@@ -890,6 +912,32 @@ mod unit {
             auto_download: false, // this is the default value
         };
         assert_eq!(arch.inventory("kmso", Model::NAM).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_count(){
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch).expect("Error filling test archive.");
+
+        // 7 and not 10 because of duplicate GFS models in the input.
+        assert_eq!(arch.count().expect("db error"), 7);
+    }
+
+    #[test]
+    fn test_count_init_times(){
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch).expect("Error filling test archive.");
+
+        assert_eq!(arch.count_init_times("kmso", Model::GFS).expect("db error"), 4);
+        assert_eq!(arch.count_init_times("kmso", Model::NAM).expect("db error"), 3);
     }
 
     // ---------------------------------------------------------------------------------------------
