@@ -25,8 +25,6 @@ pub use site::{Site, StateProv};
 // Implementation only
 //
 extern crate chrono;
-#[macro_use]
-extern crate failure;
 extern crate flate2;
 extern crate rusqlite;
 extern crate sounding_analysis;
