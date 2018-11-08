@@ -1,62 +1,69 @@
 //! Module for errors.
-use failure;
 use sounding_analysis::AnalysisError;
 use sounding_bufkit::BufkitFileError;
-
-use strum::ParseError;
+use std::error::Error;
+use std::fmt::Display;
 
 /// Error from the archive interface.
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum BufkitDataErr {
     //
     // Inherited errors from sounding stack
     //
     /// Error forwarded from sounding-analysis
-    #[fail(display = "Error from sounding-analysis.")]
-    SoundingAnalysis(#[cause] AnalysisError),
+    SoundingAnalysis(AnalysisError),
     /// Error forwarded from sounding-bufkit
-    #[fail(display = "Error from sounding-bufkit.")]
-    SoundingBufkit(#[cause] BufkitFileError),
+    SoundingBufkit(BufkitFileError),
 
     //
     // Inherited errors from std
     //
     /// Error forwarded from std
-    #[fail(display = "std io error.")]
-    IO(#[cause] ::std::io::Error),
+    IO(::std::io::Error),
     /// Error sending message...
-    #[fail(display = "other error from std lib")]
-    SenderError(#[cause] ::std::sync::mpsc::SendError<String>),
+    SenderError(::std::sync::mpsc::SendError<String>),
 
     //
     // Other forwarded errors
     //
     /// Database error
-    #[fail(display = "Error with sqlite database.")]
-    Database(#[cause] ::rusqlite::Error),
-    /// A general error forwarded with the failure crate
-    #[fail(display = "General error forwarded.")]
-    GeneralError(Box<failure::Error>),
+    Database(::rusqlite::Error),
     /// Error forwarded from the strum crate
-    #[fail(display = "Error from strum crate")]
-    StrumError(Box<failure::Error>),
+    StrumError(strum::ParseError),
+    /// General error with any cause information erased and replaced by a string
+    GeneralError(String),
 
     //
     // My own errors from this crate
     //
     /// Invalid model name
-    #[fail(display = "Invalid model name: {}.", _0)]
     InvalidModelName(String),
     /// Not enough data to complete the task.
-    #[fail(display = "Not enough data")]
     NotEnoughData,
 }
 
-impl From<failure::Error> for BufkitDataErr {
-    fn from(err: failure::Error) -> BufkitDataErr {
-        BufkitDataErr::GeneralError(Box::new(err))
+impl Display for BufkitDataErr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        use BufkitDataErr::*;
+
+        match self {
+            SoundingAnalysis(err) => write!(f, "error from sounding-analysis: {}", err),
+            SoundingBufkit(err) => write!(f, "error from sounding-bufkit: {}", err),
+
+            IO(err) => write!(f, "std lib io error: {}", err),
+            SenderError(err) => write!(f, "error sending message across threads: {}", err),
+
+            Database(err) => write!(f, "database error: {}", err),
+            StrumError(err) => write!(f, "error forwarded from strum crate: {}", err),
+            GeneralError(msg) => write!(f, "general error forwarded: {}", msg),
+
+            InvalidModelName(mdl_nm) => write!(f, "invalid model name: {}", mdl_nm),
+            NotEnoughData => write!(f, "not enough data to complete task"),
+        }
     }
 }
+
+impl Error for BufkitDataErr {}
 
 impl From<BufkitFileError> for BufkitDataErr {
     fn from(err: BufkitFileError) -> BufkitDataErr {
@@ -82,8 +89,14 @@ impl From<::rusqlite::Error> for BufkitDataErr {
     }
 }
 
-impl From<ParseError> for BufkitDataErr {
-    fn from(err: ParseError) -> BufkitDataErr {
-        BufkitDataErr::StrumError(Box::new(failure::Error::from(err)))
+impl From<strum::ParseError> for BufkitDataErr {
+    fn from(err: strum::ParseError) -> BufkitDataErr {
+        BufkitDataErr::StrumError(err)
+    }
+}
+
+impl From<Box<dyn Error>> for BufkitDataErr {
+    fn from(err: Box<dyn Error>) -> BufkitDataErr {
+        BufkitDataErr::GeneralError(err.to_string())
     }
 }
