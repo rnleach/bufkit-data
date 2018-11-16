@@ -109,6 +109,8 @@ impl Archive {
         let jh = thread::spawn(move || -> Result<(), BufkitDataErr> {
             let arch = Archive::connect(root)?;
 
+            arch.db_conn.execute("PRAGMA cache_size=10000", NO_PARAMS)?;
+
             arch.db_conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS fname ON files (file_name)",
                 NO_PARAMS,
@@ -125,6 +127,7 @@ impl Archive {
             sender
                 .send("Building set of files from the index.".to_string())
                 .map_err(BufkitDataErr::SenderError)?;
+
             let index_vals: Result<HashSet<String>, BufkitDataErr> = all_files_stmt
                 .query_map(NO_PARAMS, |row| -> String { row.get(0) })?
                 .map(|res| res.map_err(BufkitDataErr::Database))
@@ -134,6 +137,7 @@ impl Archive {
             sender
                 .send("Building set of files from the file system.".to_string())
                 .map_err(BufkitDataErr::SenderError)?;
+
             let file_system_vals: HashSet<String> = read_dir(&arch.data_root)?
                 .filter_map(|de| de.ok())
                 .map(|de| de.path())
@@ -147,18 +151,21 @@ impl Archive {
                 .map_err(BufkitDataErr::SenderError)?;
             let files_in_index_but_not_on_file_system = index_vals.difference(&file_system_vals);
 
+            arch.db_conn.execute("BEGIN TRANSACTION", NO_PARAMS)?;
             for missing_file in files_in_index_but_not_on_file_system {
                 del_stmt.execute(&[missing_file])?;
                 sender
                     .send(format!("Removing {} from index.", missing_file))
                     .map_err(BufkitDataErr::SenderError)?;
             }
+            arch.db_conn.execute("COMMIT TRANSACTION", NO_PARAMS)?;
 
             sender
                 .send("Comparing sets for files in archive but not in the index.".to_string())
                 .map_err(BufkitDataErr::SenderError)?;
             let files_not_in_index = file_system_vals.difference(&index_vals);
 
+            arch.db_conn.execute("BEGIN TRANSACTION", NO_PARAMS)?;
             for extra_file in files_not_in_index {
                 let message = if let Some((init_time, model, site)) =
                     Self::parse_compressed_file_name(&extra_file)
@@ -193,6 +200,7 @@ impl Archive {
 
                 sender.send(message).map_err(BufkitDataErr::SenderError)?;
             }
+            arch.db_conn.execute("COMMIT TRANSACTION", NO_PARAMS)?;
 
             sender
                 .send("Compressing index.".to_string())
