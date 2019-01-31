@@ -678,7 +678,7 @@ mod unit {
                 panic!("Unprepared for this test data!");
             };
 
-            let init_time = snd.get_valid_time().expect("NO VALID TIME?!");
+            let init_time = snd.valid_time().expect("NO VALID TIME?!");
             let raw_string = bufkit_file.raw_text();
 
             to_return.push((site.to_owned(), model, init_time, raw_string.to_owned()))
