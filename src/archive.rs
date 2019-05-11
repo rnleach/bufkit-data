@@ -3,6 +3,7 @@
 use chrono::{FixedOffset, NaiveDate, NaiveDateTime};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{types::ToSql, Connection, OpenFlags, Row, NO_PARAMS};
+use sounding_bufkit::BufkitData;
 use std::collections::HashSet;
 use std::fs::{create_dir, create_dir_all, read_dir, remove_file, File};
 use std::io::{Read, Write};
@@ -12,10 +13,10 @@ use std::sync::mpsc::{channel, Receiver};
 use std::thread::{self, JoinHandle};
 use strum::AsStaticRef;
 
-use errors::BufkitDataErr;
-use inventory::Inventory;
-use models::Model;
-use site::{Site, StateProv};
+use crate::errors::BufkitDataErr;
+use crate::inventory::Inventory;
+use crate::models::Model;
+use crate::site::{Site, StateProv};
 
 /// The archive.
 #[derive(Debug)]
@@ -48,28 +49,7 @@ impl Archive {
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
         )?;
 
-        db_conn.execute(
-            "CREATE TABLE files (
-                site      TEXT NOT NULL,
-                model     TEXT NOT NULL,
-                init_time TEXT NOT NULL,
-                file_name TEXT NOT NULL,
-                PRIMARY KEY (site, model, init_time)
-            )",
-            NO_PARAMS,
-        )?;
-
-        db_conn.execute(
-            "CREATE TABLE sites (
-                site          TEXT PRIMARY KEY,
-                state         TEXT DEFAULT NULL,
-                name          TEXT DEFAULT NULL,
-                notes         TEXT DEFAULT NULL,
-                auto_download INT DEFAULT 0,
-                tz_offset_sec INT DEFAULT NULL
-            )",
-            NO_PARAMS,
-        )?;
+        db_conn.execute_batch(include_str!("create_index.sql"))?;
 
         Ok(Archive {
             root,
@@ -99,7 +79,6 @@ impl Archive {
 
     /// Validate files listed in the index are in the archive too, if not remove them from the
     /// index.
-    ///
     pub fn clean(
         &self,
     ) -> Result<(JoinHandle<Result<(), BufkitDataErr>>, Receiver<String>), BufkitDataErr> {
@@ -111,16 +90,14 @@ impl Archive {
 
             arch.db_conn.execute("PRAGMA cache_size=10000", NO_PARAMS)?;
 
-            arch.db_conn.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS fname ON files (file_name)",
-                NO_PARAMS,
-            )?;
-
             let mut del_stmt = arch
                 .db_conn
                 .prepare("DELETE FROM files WHERE file_name = ?1")?;
             let mut insert_stmt = arch.db_conn.prepare(
-                "INSERT INTO files (site, model, init_time, file_name) VALUES (?1, ?2, ?3, ?4)",
+                "
+                    INSERT INTO files (site, model, init_time, end_time, file_name) 
+                    VALUES (?1, ?2, ?3, ?4, ?5)
+                ",
             )?;
             let mut all_files_stmt = arch.db_conn.prepare("SELECT file_name FROM files")?;
 
@@ -129,7 +106,7 @@ impl Archive {
                 .map_err(BufkitDataErr::SenderError)?;
 
             let index_vals: Result<HashSet<String>, BufkitDataErr> = all_files_stmt
-                .query_map(NO_PARAMS, |row| -> String { row.get(0) })?
+                .query_map(NO_PARAMS, |row| row.get::<_, String>(0))?
                 .map(|res| res.map_err(BufkitDataErr::Database))
                 .collect();
             let index_vals = index_vals?;
@@ -139,10 +116,10 @@ impl Archive {
                 .map_err(BufkitDataErr::SenderError)?;
 
             let file_system_vals: HashSet<String> = read_dir(&arch.data_root)?
-                .filter_map(|de| de.ok())
+                .filter_map(Result::ok)
                 .map(|de| de.path())
                 .filter(|p| p.is_file())
-                .filter_map(|p| p.file_name().map(|p| p.to_owned()))
+                .filter_map(|p| p.file_name().map(ToOwned::to_owned))
                 .map(|p| p.to_string_lossy().to_string())
                 .collect();
 
@@ -167,8 +144,8 @@ impl Archive {
 
             arch.db_conn.execute("BEGIN TRANSACTION", NO_PARAMS)?;
             for extra_file in files_not_in_index {
-                let message = if let Some((init_time, model, site)) =
-                    Self::parse_compressed_file_name(&extra_file)
+                let message = if let Some((init_time, end_time, model, site)) =
+                    arch.parse_compressed_file(&extra_file)
                 {
                     if !arch.site_exists(&site)? {
                         arch.add_site(&Site {
@@ -184,6 +161,7 @@ impl Archive {
                         &site.to_uppercase() as &ToSql,
                         &model.as_static() as &ToSql,
                         &init_time as &ToSql,
+                        &end_time as &ToSql,
                         &extra_file,
                     ]) {
                         Ok(_) => format!("Added {}", extra_file),
@@ -217,7 +195,7 @@ impl Archive {
     // The file system aspects of the archive, e.g. the root directory of the archive
     // ---------------------------------------------------------------------------------------------
     const DATA_DIR: &'static str = "data";
-    const DB_FILE: &'static str = "index.db";
+    const DB_FILE: &'static str = "index.sqlite";
 
     /// Retrieve a path to the root. Allows caller to store files in the archive.
     pub fn root(&self) -> &Path {
@@ -229,23 +207,22 @@ impl Archive {
     // ---------------------------------------------------------------------------------------------
 
     fn parse_row_to_site(row: &Row) -> Result<Site, rusqlite::Error> {
-        let id = row.get_checked(0)?;
-        let name = row.get_checked(1)?;
-        let notes = row.get_checked(3)?;
-        let auto_download = row.get_checked(4)?;
+        let id = row.get(0)?;
+        let name = row.get(1)?;
+        let notes = row.get(3)?;
+        let auto_download = row.get(4)?;
         let state: Option<StateProv> = row
-            .get_checked::<_, String>(2)
+            .get::<_, String>(2)
             .ok()
             .and_then(|a_string| StateProv::from_str(&a_string).ok());
 
-        let time_zone: Option<FixedOffset> =
-            row.get_checked::<_, i32>(5).ok().map(|offset: i32| {
-                if offset < 0 {
-                    FixedOffset::west(offset.abs())
-                } else {
-                    FixedOffset::east(offset)
-                }
-            });
+        let time_zone: Option<FixedOffset> = row.get::<_, i32>(5).ok().map(|offset: i32| {
+            if offset < 0 {
+                FixedOffset::west(offset.abs())
+            } else {
+                FixedOffset::east(offset)
+            }
+        });
 
         Ok(Site {
             id,
@@ -282,7 +259,8 @@ impl Archive {
             ",
                 &[&site_id.to_uppercase()],
                 Self::parse_row_to_site,
-            ).map_err(BufkitDataErr::Database)
+            )
+            .map_err(BufkitDataErr::Database)
     }
 
     /// Modify a sites values.
@@ -354,14 +332,15 @@ impl Archive {
             ",
         )?;
 
-        let init_times: Result<Vec<Result<NaiveDateTime, _>>, BufkitDataErr> = stmt
+        let init_times: Vec<Result<NaiveDateTime, _>> = stmt
             .query_map(&[&site_id.to_uppercase(), model.as_static()], |row| {
-                row.get_checked(0)
-            })?.map(|res| res.map_err(BufkitDataErr::Database))
+                row.get::<_, NaiveDateTime>(0)
+            })?
+            .map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
 
         let init_times: Vec<NaiveDateTime> =
-            init_times?.into_iter().filter_map(|res| res.ok()).collect();
+            init_times.into_iter().filter_map(Result::ok).collect();
 
         Ok(init_times)
     }
@@ -374,8 +353,8 @@ impl Archive {
                 WHERE site = ?1 AND model = ?2
             ",
             &[&site_id.to_uppercase(), model.as_static()],
-            |row| row.get_checked(0),
-        )??;
+            |row| row.get(0),
+        )?;
 
         Ok(num_records)
     }
@@ -396,17 +375,18 @@ impl Archive {
             .prepare("SELECT DISTINCT model FROM files WHERE site = ?1")?;
 
         let vals: Result<Vec<Model>, BufkitDataErr> = stmt
-            .query_map(&[&site_id.to_uppercase()], |row| {
-                let model: String = row.get(0);
-                Model::from_str(&model).map_err(|_err| BufkitDataErr::InvalidModelName(model))
-            })?.flat_map(|res| res.map_err(BufkitDataErr::Database).into_iter())
+            .query_map(&[&site_id.to_uppercase()], |row| row.get::<_, String>(0))?
+            .map(|res| res.map_err(BufkitDataErr::Database))
+            .map(|res| {
+                res.and_then(|name| Model::from_str(&name).map_err(BufkitDataErr::StrumError))
+            })
             .collect();
 
         vals
     }
 
     /// Retrieve the model initialization time of the most recent model in the archive.
-    pub fn most_recent_valid_time(
+    pub fn most_recent_init_time(
         &self,
         site_id: &str,
         model: Model,
@@ -419,10 +399,44 @@ impl Archive {
                 LIMIT 1
             ",
             &[&site_id.to_uppercase(), model.as_static()],
-            |row| row.get_checked(0),
-        )??;
+            |row| row.get(0),
+        )?;
 
         Ok(init_time)
+    }
+
+    /// Retrieve all the initialization times of all sounding files that have a sounding with a
+    /// valid time in the specified range (inclusive).
+    pub fn init_times_for_soundings_valid_between(
+        &self,
+        start: NaiveDateTime,
+        end: NaiveDateTime,
+        site_id: &str,
+        model: Model,
+    ) -> Result<Vec<NaiveDateTime>, BufkitDataErr> {
+        let mut stmt = self.db_conn.prepare(
+            "
+                SELECT init_time
+                FROM files
+                WHERE site = ?1 AND model = ?2 AND end_time >= ?3 AND init_time <= ?4
+                ORDER BY init_time ASC
+            ",
+        )?;
+
+        let init_times: Result<Vec<NaiveDateTime>, _> = stmt
+            .query_map(
+                &[
+                    &site_id.to_uppercase() as &ToSql,
+                    &model.as_static() as &ToSql,
+                    &start as &ToSql,
+                    &end as &ToSql,
+                ],
+                |row| row.get::<_, NaiveDateTime>(0),
+            )?
+            .map(|res| res.map_err(BufkitDataErr::Database))
+            .collect();
+
+        init_times
     }
 
     /// Check to see if a file is present in the archive and it is retrieveable.
@@ -439,8 +453,8 @@ impl Archive {
                 &model.as_static() as &ToSql,
                 init_time as &ToSql,
             ],
-            |row| row.get_checked(0),
-        )??;
+            |row| row.get(0),
+        )?;
 
         Ok(num_records == 1)
     }
@@ -449,9 +463,7 @@ impl Archive {
     pub fn count(&self) -> Result<i64, BufkitDataErr> {
         let num_records: i64 =
             self.db_conn
-                .query_row("SELECT COUNT(*) FROM files", NO_PARAMS, |row| {
-                    row.get_checked(0)
-                })??;
+                .query_row("SELECT COUNT(*) FROM files", NO_PARAMS, |row| row.get(0))?;
 
         Ok(num_records)
     }
@@ -465,7 +477,8 @@ impl Archive {
         &self,
         site_id: &str,
         model: Model,
-        init_time: &NaiveDateTime,
+        init_time: NaiveDateTime,
+        end_time: NaiveDateTime,
         text_data: &str,
     ) -> Result<(), BufkitDataErr> {
         if !self.site_exists(site_id)? {
@@ -485,12 +498,13 @@ impl Archive {
         encoder.write_all(text_data.as_bytes())?;
 
         self.db_conn.execute(
-            "INSERT OR REPLACE INTO files (site, model, init_time, file_name)
-                  VALUES (?1, ?2, ?3, ?4)",
+            "INSERT OR REPLACE INTO files (site, model, init_time, end_time, file_name)
+                  VALUES (?1, ?2, ?3, ?4, ?5)",
             &[
                 &site_id.to_uppercase() as &ToSql,
                 &model.as_static() as &ToSql,
-                init_time as &ToSql,
+                &init_time as &ToSql,
+                &end_time,
                 &file_name,
             ],
         )?;
@@ -503,17 +517,17 @@ impl Archive {
         &self,
         site_id: &str,
         model: Model,
-        init_time: &NaiveDateTime,
+        init_time: NaiveDateTime,
     ) -> Result<String, BufkitDataErr> {
         let file_name: String = self.db_conn.query_row(
             "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
             &[
                 &site_id.to_uppercase() as &ToSql,
                 &model.as_static() as &ToSql,
-                init_time as &ToSql,
+                &init_time as &ToSql,
             ],
-            |row| row.get_checked(0),
-        )??;
+            |row| row.get(0),
+        )?;
 
         let file = File::open(self.data_root.join(file_name))?;
         let mut decoder = GzDecoder::new(file);
@@ -524,15 +538,33 @@ impl Archive {
 
     /// Retrieve the  most recent file
     pub fn most_recent_file(&self, site_id: &str, model: Model) -> Result<String, BufkitDataErr> {
-        let init_time = self.most_recent_valid_time(site_id, model)?;
-        self.retrieve(site_id, model, &init_time)
+        let init_time = self.most_recent_init_time(site_id, model)?;
+        self.retrieve(site_id, model, init_time)
+    }
+
+    /// Retrieve all the soundings with data valid between the start and end times.
+    pub fn retrieve_all_valid_in(
+        &self,
+        start: NaiveDateTime,
+        end: NaiveDateTime,
+        site_id: &str,
+        model: Model,
+    ) -> Result<Vec<String>, BufkitDataErr> {
+        let init_times = self.init_times_for_soundings_valid_between(start, end, site_id, model)?;
+
+        let string_data: Result<Vec<String>, _> = init_times
+            .into_iter()
+            .map(|init_t| self.retrieve(site_id, model, init_t))
+            .collect();
+
+        string_data
     }
 
     fn compressed_file_name(
         &self,
         site_id: &str,
         model: Model,
-        init_time: &NaiveDateTime,
+        init_time: NaiveDateTime,
     ) -> String {
         let file_string = init_time.format("%Y%m%d%HZ").to_string();
 
@@ -544,7 +576,10 @@ impl Archive {
         )
     }
 
-    fn parse_compressed_file_name(fname: &str) -> Option<(NaiveDateTime, Model, String)> {
+    fn parse_compressed_file(
+        &self,
+        fname: &str,
+    ) -> Option<(NaiveDateTime, NaiveDateTime, Model, String)> {
         let tokens: Vec<&str> = fname.split(|c| c == '_' || c == '.').collect();
 
         if tokens.len() != 5 {
@@ -565,7 +600,16 @@ impl Archive {
             return None;
         }
 
-        Some((init_time, model, site))
+        let file = File::open(self.data_root.join(fname)).ok()?;
+        let mut decoder = GzDecoder::new(file);
+        let mut s = String::new();
+        decoder.read_to_string(&mut s).ok()?;
+
+        let anal = BufkitData::init(&s, fname).ok()?.into_iter().last()?;
+        let snd = anal.sounding();
+        let end_time = snd.valid_time()?;
+
+        Some((init_time, end_time, model, site))
     }
 
     /// Get the file name this would have if uncompressed.
@@ -594,8 +638,8 @@ impl Archive {
                 &model.as_static() as &ToSql,
                 init_time as &ToSql,
             ],
-            |row| row.get_checked(0),
-        )??;
+            |row| row.get(0),
+        )?;
 
         remove_file(self.data_root.join(file_name)).map_err(BufkitDataErr::IO)?;
 
@@ -641,7 +685,8 @@ mod unit {
     }
 
     // Function to fetch a list of test files.
-    fn get_test_data() -> Result<Vec<(String, Model, NaiveDateTime, String)>, BufkitDataErr> {
+    fn get_test_data(
+    ) -> Result<Vec<(String, Model, NaiveDateTime, NaiveDateTime, String)>, BufkitDataErr> {
         let path = PathBuf::new().join("example_data");
 
         let files = read_dir(path)?
@@ -679,9 +724,24 @@ mod unit {
             };
 
             let init_time = snd.valid_time().expect("NO VALID TIME?!");
+
+            let anal = bufkit_file
+                .data()?
+                .into_iter()
+                .last()
+                .ok_or(BufkitDataErr::NotEnoughData)?;
+            let snd = anal.sounding();
+            let end_time = snd.valid_time().expect("NO VALID TIME?!");
+
             let raw_string = bufkit_file.raw_text();
 
-            to_return.push((site.to_owned(), model, init_time, raw_string.to_owned()))
+            to_return.push((
+                site.to_owned(),
+                model,
+                init_time,
+                end_time,
+                raw_string.to_owned(),
+            ))
         }
 
         Ok(to_return)
@@ -691,8 +751,8 @@ mod unit {
     fn fill_test_archive(arch: &mut Archive) -> Result<(), BufkitDataErr> {
         let test_data = get_test_data().expect("Error loading test data.");
 
-        for (site, model, init_time, raw_data) in test_data {
-            arch.add(&site, model, &init_time, &raw_data)?;
+        for (site, model, init_time, end_time, raw_data) in test_data {
+            arch.add(&site, model, init_time, end_time, &raw_data)?;
         }
         Ok(())
     }
@@ -885,8 +945,6 @@ mod unit {
         assert!(models.contains(&Model::GFS));
         assert!(models.contains(&Model::NAM));
         assert!(!models.contains(&Model::NAM4KM));
-        assert!(!models.contains(&Model::LocalWrf));
-        assert!(!models.contains(&Model::Other));
     }
 
     #[test]
@@ -956,11 +1014,11 @@ mod unit {
 
         let test_data = get_test_data().expect("Error loading test data.");
 
-        for (site, model, init_time, raw_data) in test_data {
-            arch.add(&site, model, &init_time, &raw_data)
+        for (site, model, init_time, end_time, raw_data) in test_data {
+            arch.add(&site, model, init_time, end_time, &raw_data)
                 .expect("Failure to add.");
             let recovered_str = arch
-                .retrieve(&site, model, &init_time)
+                .retrieve(&site, model, init_time)
                 .expect("Failure to load.");
 
             assert!(raw_data == recovered_str);
@@ -977,7 +1035,7 @@ mod unit {
         fill_test_archive(&mut arch).expect("Error filling test archive.");
 
         let init_time = arch
-            .most_recent_valid_time("kmso", Model::GFS)
+            .most_recent_init_time("kmso", Model::GFS)
             .expect("Error getting valid time.");
 
         assert_eq!(init_time, NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0));
@@ -996,68 +1054,64 @@ mod unit {
         fill_test_archive(&mut arch).expect("Error filling test archive.");
 
         println!("Checking for files that should exist.");
-        assert!(
-            arch.file_exists(
+        assert!(arch
+            .file_exists(
                 "kmso",
                 Model::GFS,
                 &NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0)
-            ).expect("Error checking for existence")
-        );
-        assert!(
-            arch.file_exists(
+            )
+            .expect("Error checking for existence"));
+        assert!(arch
+            .file_exists(
                 "kmso",
                 Model::GFS,
                 &NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0)
-            ).expect("Error checking for existence")
-        );
-        assert!(
-            arch.file_exists(
+            )
+            .expect("Error checking for existence"));
+        assert!(arch
+            .file_exists(
                 "kmso",
                 Model::GFS,
                 &NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0)
-            ).expect("Error checking for existence")
-        );
-        assert!(
-            arch.file_exists(
+            )
+            .expect("Error checking for existence"));
+        assert!(arch
+            .file_exists(
                 "kmso",
                 Model::GFS,
                 &NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0)
-            ).expect("Error checking for existence")
-        );
+            )
+            .expect("Error checking for existence"));
 
         println!("Checking for files that should NOT exist.");
-        assert!(
-            !arch
-                .file_exists(
-                    "kmso",
-                    Model::GFS,
-                    &NaiveDate::from_ymd(2018, 4, 1).and_hms(0, 0, 0)
-                ).expect("Error checking for existence")
-        );
-        assert!(
-            !arch
-                .file_exists(
-                    "kmso",
-                    Model::GFS,
-                    &NaiveDate::from_ymd(2018, 4, 1).and_hms(6, 0, 0)
-                ).expect("Error checking for existence")
-        );
-        assert!(
-            !arch
-                .file_exists(
-                    "kmso",
-                    Model::GFS,
-                    &NaiveDate::from_ymd(2018, 4, 1).and_hms(12, 0, 0)
-                ).expect("Error checking for existence")
-        );
-        assert!(
-            !arch
-                .file_exists(
-                    "kmso",
-                    Model::GFS,
-                    &NaiveDate::from_ymd(2018, 4, 1).and_hms(18, 0, 0)
-                ).expect("Error checking for existence")
-        );
+        assert!(!arch
+            .file_exists(
+                "kmso",
+                Model::GFS,
+                &NaiveDate::from_ymd(2018, 4, 1).and_hms(0, 0, 0)
+            )
+            .expect("Error checking for existence"));
+        assert!(!arch
+            .file_exists(
+                "kmso",
+                Model::GFS,
+                &NaiveDate::from_ymd(2018, 4, 1).and_hms(6, 0, 0)
+            )
+            .expect("Error checking for existence"));
+        assert!(!arch
+            .file_exists(
+                "kmso",
+                Model::GFS,
+                &NaiveDate::from_ymd(2018, 4, 1).and_hms(12, 0, 0)
+            )
+            .expect("Error checking for existence"));
+        assert!(!arch
+            .file_exists(
+                "kmso",
+                Model::GFS,
+                &NaiveDate::from_ymd(2018, 4, 1).and_hms(18, 0, 0)
+            )
+            .expect("Error checking for existence"));
     }
 
     #[test]
@@ -1073,16 +1127,13 @@ mod unit {
         let model = Model::GFS;
         let site = "kmso";
 
-        assert!(
-            arch.file_exists(site, model, &init_time)
-                .expect("Error checking db")
-        );
+        assert!(arch
+            .file_exists(site, model, &init_time)
+            .expect("Error checking db"));
         arch.remove(site, model, &init_time)
             .expect("Error while removing.");
-        assert!(
-            !arch
-                .file_exists(site, model, &init_time)
-                .expect("Error checking db")
-        );
+        assert!(!arch
+            .file_exists(site, model, &init_time)
+            .expect("Error checking db"));
     }
 }

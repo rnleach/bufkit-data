@@ -44,7 +44,7 @@ pub enum BufkitDataErr {
 
 impl Display for BufkitDataErr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        use BufkitDataErr::*;
+        use crate::BufkitDataErr::*;
 
         match self {
             SoundingAnalysis(err) => write!(f, "error from sounding-analysis: {}", err),

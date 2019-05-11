@@ -1,6 +1,6 @@
 [package]
 name = "bufkit-data"
-version = "0.7.2"
+version = "0.8.0"
 authors = ["Ryan Leach <clumsycodemonkey@gmail.com>"]
 description = "A crate to manage an archive of bufkit files."
 repository = "https://github.com/rnleach/bufkit-data.git"
@@ -8,6 +8,7 @@ readme = "README.md"
 keywords = ["meteorology", "weather", "sounding"]
 categories = ["science"]
 license = "MIT"
+edition="2018"
 
 [badges]
 appveyor = { repository = "rnleach/bufkit-data", branch = "master", service = "github" }
@@ -16,11 +17,11 @@ travis-ci = { repository = "rnleach/bufkit-data", branch = "master" }
 [dependencies]
 chrono = "0.4.2"
 flate2 = {version = "1.0", features = ["rust_backend"], default-features = false }
-rusqlite = { version = "0.16", features = ["bundled", "chrono"], default-features = false }
-sounding-analysis = "0.10"
-sounding-bufkit = "0.10"
-strum = "0.13"
-strum_macros = "0.13"
+rusqlite = { version = "0.18", features = ["bundled", "chrono"], default-features = false }
+sounding-analysis = "0.11"
+sounding-bufkit = "0.11"
+strum = "0.15"
+strum_macros = "0.15"
 
 [dev-dependencies]
 tempdir = "0.3"

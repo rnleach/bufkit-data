@@ -2,6 +2,7 @@
 
 use chrono::{Duration, NaiveDateTime};
 use std::fmt;
+use strum_macros::{AsStaticStr, EnumIter, EnumString};
 
 /// Models potentially stored in the archive.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter, Hash)]
@@ -25,24 +26,16 @@ pub enum Model {
     /// The high resolution nest of the `NAM`
     #[strum(to_string = "nam4km", serialize = "NAM4KM")]
     NAM4KM,
-    /// This could be any special local model, but let it be WRF.
-    #[strum(to_string = "local_wrf", serialize = "LOCAL_WRF")]
-    LocalWrf,
-    /// This is any other local model not accounted for so far.
-    #[strum(to_string = "other_model", serialize = "OTHER")]
-    Other,
 }
 
 impl fmt::Display for Model {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Model::*;
+        use crate::Model::*;
 
         match *self {
             GFS => write!(f, "{}", stringify!(GFS)),
             NAM => write!(f, "{}", stringify!(NAM)),
             NAM4KM => write!(f, "{}", stringify!(NAM4KM)),
-            LocalWrf => write!(f, "{}", stringify!(LocalWRf)),
-            Other => write!(f, "{}", stringify!(Other)),
         }
     }
 }
@@ -54,8 +47,6 @@ impl Model {
             Model::GFS => 6,
             Model::NAM => 6,
             Model::NAM4KM => 6,
-            Model::LocalWrf => 24, // Probably won't be able to download anyway, can't build URL yet.
-            Model::Other => 24, // Probably won't be able to download anyway, can't build URL yet.
         }
     }
 

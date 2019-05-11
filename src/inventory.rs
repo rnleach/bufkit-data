@@ -1,7 +1,7 @@
+use crate::errors::BufkitDataErr;
+use crate::models::Model;
+use crate::site::Site;
 use chrono::{Duration, NaiveDateTime};
-use errors::BufkitDataErr;
-use models::Model;
-use site::Site;
 
 /// Inventory lists first & last initialization times of the models in the archive for a site &
 /// model. It also contains a list of model initialization times that are missing between the first
