@@ -4,13 +4,15 @@ use chrono::{FixedOffset, NaiveDate, NaiveDateTime};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{types::ToSql, Connection, OpenFlags, Row, NO_PARAMS};
 use sounding_bufkit::BufkitData;
-use std::collections::HashSet;
-use std::fs::{create_dir, create_dir_all, read_dir, remove_file, File};
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::sync::mpsc::{channel, Receiver};
-use std::thread::{self, JoinHandle};
+use std::{
+    collections::HashSet,
+    fs::{create_dir_all, read_dir, remove_file, File},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::mpsc::{channel, Receiver},
+    thread::{self, JoinHandle},
+};
 use strum::AsStaticRef;
 
 use crate::errors::BufkitDataErr;
@@ -40,8 +42,7 @@ impl Archive {
         let db_file = root.as_ref().join(Archive::DB_FILE);
         let root = root.as_ref().to_path_buf();
 
-        create_dir_all(&root)?;
-        create_dir(&data_root)?; // The folder to store the sounding files.
+        create_dir_all(&data_root)?; // The folder to store the sounding files.
 
         // Create and set up the archive
         let db_conn = Connection::open_with_flags(

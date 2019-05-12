@@ -1,8 +1,7 @@
 //! Module for errors.
 use sounding_analysis::AnalysisError;
 use sounding_bufkit::BufkitFileError;
-use std::error::Error;
-use std::fmt::Display;
+use std::{error::Error, fmt::Display};
 
 /// Error from the archive interface.
 #[derive(Debug)]
