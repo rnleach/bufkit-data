@@ -20,9 +20,12 @@ CREATE TABLE files (
 );
 
 -- For fast searches by file name.
-CREATE UNIQUE INDEX fname ON files(file_name);  
+CREATE UNIQUE INDEX fname ON files(file_name);
 
 -- For fast searches by metadata.
-CREATE UNIQUE INDEX no_dups_files ON files(model, site, init_time); 
+CREATE UNIQUE INDEX no_dups_files ON files(model, site, init_time);
+
+-- For fast searches including end times
+CREATE INDEX time_ranges ON files(model, site, init_time, end_time);
 
 COMMIT;

@@ -96,7 +96,7 @@ impl Archive {
                 .prepare("DELETE FROM files WHERE file_name = ?1")?;
             let mut insert_stmt = arch.db_conn.prepare(
                 "
-                    INSERT INTO files (site, model, init_time, end_time, file_name) 
+                    INSERT INTO files (site, model, init_time, end_time, file_name)
                     VALUES (?1, ?2, ?3, ?4, ?5)
                 ",
             )?;
@@ -159,10 +159,10 @@ impl Archive {
                         })?;
                     }
                     match insert_stmt.execute(&[
-                        &site.to_uppercase() as &ToSql,
-                        &model.as_static() as &ToSql,
-                        &init_time as &ToSql,
-                        &end_time as &ToSql,
+                        &site.to_uppercase() as &dyn ToSql,
+                        &model.as_static() as &dyn ToSql,
+                        &init_time as &dyn ToSql,
+                        &end_time as &dyn ToSql,
                         &extra_file,
                     ]) {
                         Ok(_) => format!("Added {}", extra_file),
@@ -268,14 +268,14 @@ impl Archive {
     pub fn set_site_info(&self, site: &Site) -> Result<(), BufkitDataErr> {
         self.db_conn.execute(
             "
-                UPDATE sites 
+                UPDATE sites
                 SET (state,name,notes,auto_download,tz_offset_sec)
                 = (?2, ?3, ?4, ?5, ?6)
                 WHERE site = ?1
             ",
             &[
                 &site.id.to_uppercase(),
-                &site.state.map(|state_prov| state_prov.as_static()) as &ToSql,
+                &site.state.map(|state_prov| state_prov.as_static()) as &dyn ToSql,
                 &site.name,
                 &site.notes,
                 &site.auto_download,
@@ -293,7 +293,7 @@ impl Archive {
                   VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             &[
                 &site.id.to_uppercase(),
-                &site.state.map(|state_prov| state_prov.as_static()) as &ToSql,
+                &site.state.map(|state_prov| state_prov.as_static()) as &dyn ToSql,
                 &site.name,
                 &site.notes,
                 &site.auto_download,
@@ -327,7 +327,7 @@ impl Archive {
     ) -> Result<Vec<NaiveDateTime>, BufkitDataErr> {
         let mut stmt = self.db_conn.prepare(
             "
-                SELECT init_time FROM files 
+                SELECT init_time FROM files
                 WHERE site = ?1 AND model = ?2
                 ORDER BY init_time ASC
             ",
@@ -350,7 +350,7 @@ impl Archive {
     pub fn count_init_times(&self, site_id: &str, model: Model) -> Result<i64, BufkitDataErr> {
         let num_records: i64 = self.db_conn.query_row(
             "
-                SELECT COUNT(init_time) FROM files 
+                SELECT COUNT(init_time) FROM files
                 WHERE site = ?1 AND model = ?2
             ",
             &[&site_id.to_uppercase(), model.as_static()],
@@ -394,7 +394,7 @@ impl Archive {
     ) -> Result<NaiveDateTime, BufkitDataErr> {
         let init_time: NaiveDateTime = self.db_conn.query_row(
             "
-                SELECT init_time FROM files 
+                SELECT init_time FROM files
                 WHERE site = ?1 AND model = ?2
                 ORDER BY init_time DESC
                 LIMIT 1
@@ -419,7 +419,7 @@ impl Archive {
             "
                 SELECT init_time
                 FROM files
-                WHERE site = ?1 AND model = ?2 AND end_time >= ?3 AND init_time <= ?4
+                WHERE site = ?1 AND model = ?2 AND init_time <= ?4 AND end_time >= ?3
                 ORDER BY init_time ASC
             ",
         )?;
@@ -427,10 +427,10 @@ impl Archive {
         let init_times: Result<Vec<NaiveDateTime>, _> = stmt
             .query_map(
                 &[
-                    &site_id.to_uppercase() as &ToSql,
-                    &model.as_static() as &ToSql,
-                    &start as &ToSql,
-                    &end as &ToSql,
+                    &site_id.to_uppercase() as &dyn ToSql,
+                    &model.as_static() as &dyn ToSql,
+                    &start as &dyn ToSql,
+                    &end as &dyn ToSql,
                 ],
                 |row| row.get::<_, NaiveDateTime>(0),
             )?
@@ -450,9 +450,9 @@ impl Archive {
         let num_records: i32 = self.db_conn.query_row(
             "SELECT COUNT(*) FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
             &[
-                &site_id.to_uppercase() as &ToSql,
-                &model.as_static() as &ToSql,
-                init_time as &ToSql,
+                &site_id.to_uppercase() as &dyn ToSql,
+                &model.as_static() as &dyn ToSql,
+                init_time as &dyn ToSql,
             ],
             |row| row.get(0),
         )?;
@@ -502,9 +502,9 @@ impl Archive {
             "INSERT OR REPLACE INTO files (site, model, init_time, end_time, file_name)
                   VALUES (?1, ?2, ?3, ?4, ?5)",
             &[
-                &site_id.to_uppercase() as &ToSql,
-                &model.as_static() as &ToSql,
-                &init_time as &ToSql,
+                &site_id.to_uppercase() as &dyn ToSql,
+                &model.as_static() as &dyn ToSql,
+                &init_time as &dyn ToSql,
                 &end_time,
                 &file_name,
             ],
@@ -523,9 +523,9 @@ impl Archive {
         let file_name: String = self.db_conn.query_row(
             "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
             &[
-                &site_id.to_uppercase() as &ToSql,
-                &model.as_static() as &ToSql,
-                &init_time as &ToSql,
+                &site_id.to_uppercase() as &dyn ToSql,
+                &model.as_static() as &dyn ToSql,
+                &init_time as &dyn ToSql,
             ],
             |row| row.get(0),
         )?;
@@ -606,8 +606,7 @@ impl Archive {
         let mut s = String::new();
         decoder.read_to_string(&mut s).ok()?;
 
-        let anal = BufkitData::init(&s, fname).ok()?.into_iter().last()?;
-        let snd = anal.sounding();
+        let snd = BufkitData::init(&s, fname).ok()?.into_iter().last()?.0;
         let end_time = snd.valid_time()?;
 
         Some((init_time, end_time, model, site))
@@ -635,9 +634,9 @@ impl Archive {
         let file_name: String = self.db_conn.query_row(
             "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
             &[
-                &site_id.to_uppercase() as &ToSql,
-                &model.as_static() as &ToSql,
-                init_time as &ToSql,
+                &site_id.to_uppercase() as &dyn ToSql,
+                &model.as_static() as &dyn ToSql,
+                init_time as &dyn ToSql,
             ],
             |row| row.get(0),
         )?;
@@ -647,9 +646,9 @@ impl Archive {
         self.db_conn.execute(
             "DELETE FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
             &[
-                &site_id.to_uppercase() as &ToSql,
-                &model.as_static() as &ToSql,
-                init_time as &ToSql,
+                &site_id.to_uppercase() as &dyn ToSql,
+                &model.as_static() as &dyn ToSql,
+                init_time as &dyn ToSql,
             ],
         )?;
 
@@ -706,12 +705,11 @@ mod unit {
 
         for path in files {
             let bufkit_file = BufkitFile::load(&path)?;
-            let anal = bufkit_file
+            let (snd, _) = bufkit_file
                 .data()?
                 .into_iter()
                 .nth(0)
                 .ok_or(BufkitDataErr::NotEnoughData)?;
-            let snd = anal.sounding();
 
             let model = if path.to_string_lossy().to_string().contains("gfs") {
                 Model::GFS
@@ -726,12 +724,11 @@ mod unit {
 
             let init_time = snd.valid_time().expect("NO VALID TIME?!");
 
-            let anal = bufkit_file
+            let (snd, _) = bufkit_file
                 .data()?
                 .into_iter()
                 .last()
                 .ok_or(BufkitDataErr::NotEnoughData)?;
-            let snd = anal.sounding();
             let end_time = snd.valid_time().expect("NO VALID TIME?!");
 
             let raw_string = bufkit_file.raw_text();

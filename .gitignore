@@ -11,6 +11,9 @@ Cargo.lock
 makefile
 *.sublime*
 .vscode
+*.swp
+Session.vim
+tags
 
 #
 # OS related
