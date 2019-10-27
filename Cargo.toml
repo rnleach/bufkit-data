@@ -15,7 +15,7 @@ appveyor = { repository = "rnleach/bufkit-data", branch = "master", service = "g
 travis-ci = { repository = "rnleach/bufkit-data", branch = "master" }
 
 [dependencies]
-chrono = "0.4.2"
+chrono = "^0.4"
 flate2 = {version = "1.0", features = ["rust_backend"], default-features = false }
 rusqlite = { version = "0.20", features = ["bundled", "chrono"], default-features = false }
 sounding-analysis = "^0.12"
