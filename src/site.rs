@@ -1,5 +1,5 @@
 use chrono::FixedOffset;
-use strum_macros::{AsStaticStr, EnumIter, EnumString};
+use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
 /// Description of a site with a sounding.
 #[derive(Clone, Debug, PartialEq)]
@@ -29,7 +29,7 @@ impl Site {
 }
 
 /// State/Providence abreviations for declaring a state in the site.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, AsStaticStr, EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, IntoStaticStr, EnumIter)]
 #[allow(missing_docs)]
 pub enum StateProv {
     AL, // Alabama
@@ -93,6 +93,13 @@ pub enum StateProv {
     VI, // Virgin Islands
 }
 
+impl StateProv {
+    /// Get a static string representation.
+    pub fn as_static_str(self) -> &'static str {
+        self.into()
+    }
+}
+
 /*--------------------------------------------------------------------------------------------------
                                           Unit Tests
 --------------------------------------------------------------------------------------------------*/
@@ -101,7 +108,7 @@ mod unit {
     use super::*;
 
     use std::str::FromStr;
-    use strum::{AsStaticRef, IntoEnumIterator};
+    use strum::IntoEnumIterator;
 
     #[test]
     fn test_site_incomplete() {
@@ -129,7 +136,7 @@ mod unit {
 
     #[test]
     fn test_to_string_for_state_prov() {
-        assert_eq!(StateProv::AL.as_static(), "AL");
+        assert_eq!(StateProv::AL.as_static_str(), "AL");
     }
 
     #[test]
@@ -141,7 +148,7 @@ mod unit {
     fn round_trip_strings_for_state_prov() {
         for state_prov in StateProv::iter() {
             assert_eq!(
-                StateProv::from_str(state_prov.as_static()).unwrap(),
+                StateProv::from_str(state_prov.as_static_str()).unwrap(),
                 state_prov
             );
         }

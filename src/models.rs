@@ -2,10 +2,10 @@
 
 use chrono::{Duration, NaiveDateTime};
 use std::fmt;
-use strum_macros::{AsStaticStr, EnumIter, EnumString};
+use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
 /// Models potentially stored in the archive.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, AsStaticStr, EnumIter, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, IntoStaticStr, EnumIter, Hash)]
 pub enum Model {
     /// The U.S. Global Forecast System
     #[strum(
@@ -92,6 +92,11 @@ impl Model {
         let steps: i64 = (*end - round_start).num_hours() / self.hours_between_runs();
 
         (0..=steps).map(move |step| round_start + Duration::hours(step * delta_t))
+    }
+
+    /// Get a static str representation
+    pub fn as_static_str(self) -> &'static str {
+        self.into()
     }
 }
 

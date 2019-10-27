@@ -13,7 +13,6 @@ use std::{
     sync::mpsc::{channel, Receiver},
     thread::{self, JoinHandle},
 };
-use strum::AsStaticRef;
 
 use crate::errors::BufkitDataErr;
 use crate::inventory::Inventory;
@@ -80,6 +79,7 @@ impl Archive {
 
     /// Validate files listed in the index are in the archive too, if not remove them from the
     /// index.
+    #[allow(clippy::type_complexity)]
     pub fn clean(
         &self,
     ) -> Result<(JoinHandle<Result<(), BufkitDataErr>>, Receiver<String>), BufkitDataErr> {
@@ -158,9 +158,10 @@ impl Archive {
                             time_zone: None,
                         })?;
                     }
+
                     match insert_stmt.execute(&[
                         &site.to_uppercase() as &dyn ToSql,
-                        &model.as_static() as &dyn ToSql,
+                        &model.as_static_str() as &dyn ToSql,
                         &init_time as &dyn ToSql,
                         &end_time as &dyn ToSql,
                         &extra_file,
@@ -275,7 +276,7 @@ impl Archive {
             ",
             &[
                 &site.id.to_uppercase(),
-                &site.state.map(|state_prov| state_prov.as_static()) as &dyn ToSql,
+                &site.state.map(|state_prov| state_prov.as_static_str()) as &dyn ToSql,
                 &site.name,
                 &site.notes,
                 &site.auto_download,
@@ -293,7 +294,7 @@ impl Archive {
                   VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             &[
                 &site.id.to_uppercase(),
-                &site.state.map(|state_prov| state_prov.as_static()) as &dyn ToSql,
+                &site.state.map(|state_prov| state_prov.as_static_str()) as &dyn ToSql,
                 &site.name,
                 &site.notes,
                 &site.auto_download,
@@ -334,7 +335,7 @@ impl Archive {
         )?;
 
         let init_times: Vec<Result<NaiveDateTime, _>> = stmt
-            .query_map(&[&site_id.to_uppercase(), model.as_static()], |row| {
+            .query_map(&[&site_id.to_uppercase(), model.as_static_str()], |row| {
                 row.get::<_, NaiveDateTime>(0)
             })?
             .map(|res| res.map_err(BufkitDataErr::Database))
@@ -353,7 +354,7 @@ impl Archive {
                 SELECT COUNT(init_time) FROM files
                 WHERE site = ?1 AND model = ?2
             ",
-            &[&site_id.to_uppercase(), model.as_static()],
+            &[&site_id.to_uppercase(), model.as_static_str()],
             |row| row.get(0),
         )?;
 
@@ -399,7 +400,7 @@ impl Archive {
                 ORDER BY init_time DESC
                 LIMIT 1
             ",
-            &[&site_id.to_uppercase(), model.as_static()],
+            &[&site_id.to_uppercase(), model.as_static_str()],
             |row| row.get(0),
         )?;
 
@@ -428,7 +429,7 @@ impl Archive {
             .query_map(
                 &[
                     &site_id.to_uppercase() as &dyn ToSql,
-                    &model.as_static() as &dyn ToSql,
+                    &model.as_static_str() as &dyn ToSql,
                     &start as &dyn ToSql,
                     &end as &dyn ToSql,
                 ],
@@ -451,7 +452,7 @@ impl Archive {
             "SELECT COUNT(*) FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
             &[
                 &site_id.to_uppercase() as &dyn ToSql,
-                &model.as_static() as &dyn ToSql,
+                &model.as_static_str() as &dyn ToSql,
                 init_time as &dyn ToSql,
             ],
             |row| row.get(0),
@@ -503,7 +504,7 @@ impl Archive {
                   VALUES (?1, ?2, ?3, ?4, ?5)",
             &[
                 &site_id.to_uppercase() as &dyn ToSql,
-                &model.as_static() as &dyn ToSql,
+                &model.as_static_str() as &dyn ToSql,
                 &init_time as &dyn ToSql,
                 &end_time,
                 &file_name,
@@ -524,7 +525,7 @@ impl Archive {
             "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
             &[
                 &site_id.to_uppercase() as &dyn ToSql,
-                &model.as_static() as &dyn ToSql,
+                &model.as_static_str() as &dyn ToSql,
                 &init_time as &dyn ToSql,
             ],
             |row| row.get(0),
@@ -572,7 +573,7 @@ impl Archive {
         format!(
             "{}_{}_{}.buf.gz",
             file_string,
-            model.as_static(),
+            model.as_static_str(),
             site_id.to_uppercase()
         )
     }
@@ -619,7 +620,7 @@ impl Archive {
         format!(
             "{}_{}_{}.buf",
             file_string,
-            model.as_static(),
+            model.as_static_str(),
             site_id.to_uppercase()
         )
     }
@@ -635,7 +636,7 @@ impl Archive {
             "SELECT file_name FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
             &[
                 &site_id.to_uppercase() as &dyn ToSql,
-                &model.as_static() as &dyn ToSql,
+                &model.as_static_str() as &dyn ToSql,
                 init_time as &dyn ToSql,
             ],
             |row| row.get(0),
@@ -647,7 +648,7 @@ impl Archive {
             "DELETE FROM files WHERE site = ?1 AND model = ?2 AND init_time = ?3",
             &[
                 &site_id.to_uppercase() as &dyn ToSql,
-                &model.as_static() as &dyn ToSql,
+                &model.as_static_str() as &dyn ToSql,
                 init_time as &dyn ToSql,
             ],
         )?;
