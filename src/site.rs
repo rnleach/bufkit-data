@@ -2,7 +2,7 @@ use chrono::FixedOffset;
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
 /// Description of a site with a sounding.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Site {
     /// Site id, usually a 3 or 4 letter identifier (e.g. kord katl ksea).
     pub id: String,
@@ -29,7 +29,7 @@ impl Site {
 }
 
 /// State/Providence abreviations for declaring a state in the site.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, IntoStaticStr, EnumIter)]
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, EnumString, IntoStaticStr, EnumIter)]
 #[allow(missing_docs)]
 pub enum StateProv {
     AL, // Alabama
