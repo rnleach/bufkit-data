@@ -69,18 +69,30 @@ impl Model {
     ) -> impl Iterator<Item = NaiveDateTime> {
         let delta_t = self.hours_between_runs();
 
-        //
         // Find a good start time that corresponds with an actual model run time.
-        //
-        let mut round_start = start.date().and_hms(0, 0, 0) + Duration::hours(self.base_hour());
-        // Make sure we didn't jump ahead into the future.
-        while round_start > *start {
-            round_start -= Duration::hours(self.hours_between_runs());
-        }
-        // Make sure we didn't jumb too far back.
-        while round_start < *start {
-            round_start += Duration::hours(self.hours_between_runs());
-        }
+        let round_start = if *start < *end {
+            let mut strt = start.date().and_hms(0, 0, 0) + Duration::hours(self.base_hour());
+            // Make sure we didn't jump ahead into the future.
+            while strt > *start {
+                strt -= Duration::hours(self.hours_between_runs());
+            }
+            // Make sure we didn't jumb too far back.
+            while strt < *start {
+                strt += Duration::hours(self.hours_between_runs());
+            }
+
+            strt
+        } else {
+            let mut strt = start.date().and_hms(0, 0, 0) + Duration::hours(self.base_hour());
+            while strt < *start {
+                strt += Duration::hours(self.hours_between_runs());
+            }
+            while strt > *start {
+                strt -= Duration::hours(self.hours_between_runs());
+            }
+
+            strt
+        };
 
         let steps: i64 = (*end - round_start).num_hours() / self.hours_between_runs();
 
@@ -117,11 +129,13 @@ mod unit {
         Model::GFS
             .all_runs(start, end)
             .scan(*start, |prev, rt| {
+                eprintln!("{} <= {}", prev, rt);
                 assert!(*prev <= rt);
                 *prev = rt;
                 Some(rt)
             })
             .for_each(|rt| assert!(rt >= *start && rt <= *end));
+        eprintln!();
 
         let start = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 1, 0);
         let end = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 0, 0);
@@ -129,11 +143,13 @@ mod unit {
         Model::GFS
             .all_runs(start, end)
             .scan(*start, |prev, rt| {
+                eprintln!("{} <= {}", prev, rt);
                 assert!(*prev <= rt);
                 *prev = rt;
                 Some(rt)
             })
             .for_each(|rt| assert!(rt >= *start && rt <= *end));
+        eprintln!();
 
         let end = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 0, 0);
         let start = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 0, 0);
@@ -141,11 +157,13 @@ mod unit {
         Model::GFS
             .all_runs(start, end)
             .scan(*start, |prev, rt| {
+                eprintln!("{} >= {}", prev, rt);
                 assert!(*prev >= rt);
                 *prev = rt;
                 Some(rt)
             })
             .for_each(|rt| assert!(rt >= *end && rt <= *start));
+        eprintln!();
 
         let end = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 1, 0);
         let start = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 0, 0);
@@ -153,6 +171,21 @@ mod unit {
         Model::GFS
             .all_runs(start, end)
             .scan(*start, |prev, rt| {
+                eprintln!("{} >= {}", prev, rt);
+                assert!(*prev >= rt);
+                *prev = rt;
+                Some(rt)
+            })
+            .for_each(|rt| assert!(rt >= *end && rt <= *start));
+        eprintln!();
+
+        let end = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 1, 0);
+        let start = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 2, 0);
+        assert_eq!(Model::GFS.all_runs(start, end).count(), 4);
+        Model::GFS
+            .all_runs(start, end)
+            .scan(*start, |prev, rt| {
+                eprintln!("{} >= {}", prev, rt);
                 assert!(*prev >= rt);
                 *prev = rt;
                 Some(rt)
