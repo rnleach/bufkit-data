@@ -6,25 +6,19 @@ use std::{error::Error, fmt::Display};
 /// Error from the archive interface.
 #[derive(Debug)]
 pub enum BufkitDataErr {
-    //
     // Inherited errors from sounding stack
-    //
     /// Error forwarded from sounding-analysis
     SoundingAnalysis(AnalysisError),
     /// Error forwarded from sounding-bufkit
     SoundingBufkit(BufkitFileError),
 
-    //
     // Inherited errors from std
-    //
     /// Error forwarded from std
     IO(::std::io::Error),
     /// Error sending message...
     SenderError(::std::sync::mpsc::SendError<String>),
 
-    //
     // Other forwarded errors
-    //
     /// Database error
     Database(::rusqlite::Error),
     /// Error forwarded from the strum crate
@@ -32,11 +26,11 @@ pub enum BufkitDataErr {
     /// General error with any cause information erased and replaced by a string
     GeneralError(String),
 
-    //
     // My own errors from this crate
-    //
     /// Invalid model name
     InvalidModelName(String),
+    /// Site ID does not exist.
+    InvalidSiteId(String),
     /// Not enough data to complete the task.
     NotEnoughData,
 }
@@ -57,6 +51,7 @@ impl Display for BufkitDataErr {
             GeneralError(msg) => write!(f, "general error forwarded: {}", msg),
 
             InvalidModelName(mdl_nm) => write!(f, "invalid model name: {}", mdl_nm),
+            InvalidSiteId(site_id) => write!(f, "invalid site id: {}", site_id),
             NotEnoughData => write!(f, "not enough data to complete task"),
         }
     }

@@ -1,11 +1,17 @@
 use chrono::FixedOffset;
+use std::fmt::Display;
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
 /// Description of a site with a sounding.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Site {
-    /// Site id, usually a 3 or 4 letter identifier (e.g. kord katl ksea).
-    pub id: String,
+    /// Station number, this should be unique to the site. Site ids sometimes change around.
+    pub station_num: u32,
+    /// Site ID. This is usually a 3 or 4 letter ID. These change from time to time and are not
+    /// always unique to a site. If you need an identifief unique to a location, use the
+    /// station_num. Because these change, it is possible to orphan a site with a site id, hence
+    /// the option.
+    pub id: Option<String>,
     /// A longer, more human readable name.
     pub name: Option<String>,
     /// Any relevant notes about the site.
@@ -25,6 +31,34 @@ impl Site {
     /// rarely used.
     pub fn incomplete(&self) -> bool {
         self.name.is_none() || self.state.is_none() || self.time_zone.is_none()
+    }
+}
+
+impl Display for Site {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        writeln!(
+            formatter,
+            "Site: station_num - {:6} | name - {:20} | state - {:2} | notes - {} | download - {}",
+            self.station_num,
+            self.id.as_deref().unwrap_or("None"),
+            self.state.map(|s| s.as_static_str()).unwrap_or("None"),
+            self.notes.as_deref().unwrap_or("None"),
+            self.auto_download,
+        )
+    }
+}
+
+impl Default for Site {
+    fn default() -> Self {
+        Site {
+            station_num: 0,
+            id: None,
+            name: None,
+            notes: None,
+            state: None,
+            auto_download: false,
+            time_zone: None,
+        }
     }
 }
 
@@ -113,7 +147,8 @@ mod unit {
     #[test]
     fn test_site_incomplete() {
         let complete_site = Site {
-            id: "kxly".to_owned(),
+            station_num: 1,
+            id: Some("kxly".to_owned()),
             name: Some("tv station".to_owned()),
             state: Some(StateProv::VI),
             notes: Some("".to_owned()),
@@ -122,7 +157,8 @@ mod unit {
         };
 
         let incomplete_site = Site {
-            id: "kxly".to_owned(),
+            station_num: 1,
+            id: Some("kxly".to_owned()),
             name: Some("tv station".to_owned()),
             state: None,
             notes: None,

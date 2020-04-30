@@ -56,9 +56,7 @@ impl Model {
     /// allows you to reconstruct these times. Note that SREF starts at 03Z and runs every 6 hours,
     /// so it is different.
     pub fn base_hour(self) -> i64 {
-        match self {
-            _ => 0,
-        }
+        0
     }
 
     /// Create an iterator of all the model runs between two times
