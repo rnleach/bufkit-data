@@ -6,6 +6,7 @@ use crate::{errors::BufkitDataErr, models::Model, site::Site};
 
 use super::Archive;
 
+// FIXME: Completely redo this.
 impl Archive {
     /// Validate files listed in the index are in the archive too, if not remove them from the
     /// index.
@@ -55,7 +56,7 @@ impl Archive {
 
     #[inline]
     fn get_all_files_in_data_dir(&self, arch: &Archive) -> Result<HashSet<String>, BufkitDataErr> {
-        Ok(std::fs::read_dir(&arch.data_root)?
+        Ok(std::fs::read_dir(&arch.data_root())?
             .filter_map(Result::ok)
             .map(|de| de.path())
             .filter(|p| p.is_file())
@@ -106,9 +107,12 @@ impl Archive {
             let message = if let Some((init_time, end_time, model, site)) =
                 arch.extract_site_info_from_file(&extra_file)
             {
-                if !arch.site_exists(site.station_num)? {
+                let site: Site = if let Some(site_found) = arch.site(site.station_num) {
+                    site_found
+                } else {
                     arch.add_site(&site)?;
-                }
+                    site
+                };
 
                 match insert_stmt.execute(&[
                     &site.station_num,
@@ -119,13 +123,13 @@ impl Archive {
                 ]) {
                     Ok(_) => format!("Added {}", extra_file),
                     Err(_) => {
-                        std::fs::remove_file(arch.data_root.join(extra_file))?;
+                        std::fs::remove_file(arch.data_root().join(extra_file))?;
                         format!("Duplicate file removed: {}", extra_file)
                     }
                 }
             } else {
                 // Remove non-bufkit file
-                std::fs::remove_file(arch.data_root.join(extra_file))?;
+                std::fs::remove_file(arch.data_root().join(extra_file))?;
                 format!("Removed non-bufkit file: {}", extra_file)
             };
 
@@ -157,7 +161,7 @@ impl Archive {
 
         let orphans = stations_in_index.difference(&stations_with_ids);
         for &orphan in orphans {
-            if let Some(site) = arch.site_info(orphan as u32) {
+            if let Some(site) = arch.site(orphan as u32) {
                 println!("     {}", site);
             } else {
                 println!("     {} - unknown", orphan);
@@ -180,7 +184,7 @@ impl Archive {
         let model = Model::from_str(tokens[1]).ok()?;
         let id = Some(tokens[2].to_owned());
 
-        let file = std::fs::File::open(self.data_root.join(fname)).ok()?;
+        let file = std::fs::File::open(self.data_root().join(fname)).ok()?;
         let mut decoder = flate2::read::GzDecoder::new(file);
         let mut s = String::new();
         decoder.read_to_string(&mut s).ok()?;
