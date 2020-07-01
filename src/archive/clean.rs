@@ -2,7 +2,7 @@
 
 use std::{collections::HashSet, convert::TryFrom, io::Read, str::FromStr};
 
-use crate::{errors::BufkitDataErr, models::Model, site::Site};
+use crate::{coords::Coords, errors::BufkitDataErr, models::Model, site::Site};
 
 use super::Archive;
 
@@ -104,13 +104,13 @@ impl Archive {
         arch.db_conn
             .execute("BEGIN TRANSACTION", rusqlite::NO_PARAMS)?;
         for extra_file in files_not_in_index {
-            let message = if let Some((init_time, end_time, model, site)) =
+            let message = if let Some((init_time, end_time, model, site, coords)) =
                 arch.extract_site_info_from_file(&extra_file)
             {
                 let site: Site = if let Some(site_found) = arch.site(site.station_num) {
                     site_found
                 } else {
-                    arch.add_site(&site)?;
+                    arch.add_site(&site, coords)?;
                     site
                 };
 
@@ -174,7 +174,13 @@ impl Archive {
     fn extract_site_info_from_file(
         &self,
         fname: &str,
-    ) -> Option<(chrono::NaiveDateTime, chrono::NaiveDateTime, Model, Site)> {
+    ) -> Option<(
+        chrono::NaiveDateTime,
+        chrono::NaiveDateTime,
+        Model,
+        Site,
+        Coords,
+    )> {
         let tokens: Vec<&str> = fname.split(|c| c == '_' || c == '.').collect();
 
         if tokens.len() != 5 || tokens[3] != "buf" || tokens[4] != "gz" {
@@ -204,11 +210,13 @@ impl Archive {
             .into_option()
             .and_then(|int32| u32::try_from(int32).ok())?;
 
+        let coords: Coords = first.station_info().location().map(Coords::from)?;
+
         let site = Site {
             station_num,
             id,
             ..Site::default()
         };
-        Some((init_time, end_time, model, site))
+        Some((init_time, end_time, model, site, coords))
     }
 }

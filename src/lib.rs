@@ -13,7 +13,7 @@
 //
 // Public API
 //
-pub use crate::archive::Archive;
+pub use crate::archive::{AddFileResult, Archive};
 pub use crate::errors::BufkitDataErr;
 pub use crate::inventory::Inventory;
 pub use crate::models::Model;
@@ -23,6 +23,7 @@ pub use crate::site::{Site, StateProv};
 // Implementation only
 //
 mod archive;
+mod coords;
 mod errors;
 mod inventory;
 mod models;
