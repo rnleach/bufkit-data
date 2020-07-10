@@ -312,6 +312,29 @@ mod unit {
         fill_test_archive(&mut arch);
     }
 
+    #[test]
+    fn test_remove_file() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        let site = StationNumber::from(727730); // Station number for KMSO
+        let init_time = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let model = Model::GFS;
+
+        assert!(arch
+            .file_exists(site, model, &init_time)
+            .expect("Error checking db"));
+        arch.remove(site, model, init_time)
+            .expect("Error while removing.");
+        assert!(!arch
+            .file_exists(site, model, &init_time)
+            .expect("Error checking db"));
+    }
+
     /*
     #[test]
     fn test_models_for_site() {
@@ -517,27 +540,5 @@ mod unit {
             .expect("Error checking for existence"));
     }
 
-    #[test]
-    fn test_remove_file() {
-        let TestArchive {
-            tmp: _tmp,
-            mut arch,
-        } = create_test_archive().expect("Failed to create test archive.");
-
-        fill_test_archive(&mut arch).expect("Error filling test archive.");
-
-        let site = arch.site_for_id("kmso").unwrap();
-        let init_time = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
-        let model = Model::GFS;
-
-        assert!(arch
-            .file_exists(&site, model, &init_time)
-            .expect("Error checking db"));
-        arch.remove(&site, model, &init_time)
-            .expect("Error while removing.");
-        assert!(!arch
-            .file_exists(&site, model, &init_time)
-            .expect("Error checking db"));
-    }
     */
 }

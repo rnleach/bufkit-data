@@ -49,9 +49,12 @@ impl Archive {
         let site_id = Some(site_id_hint);
 
         if let None = self.site(station_num) {
-            let new_site = SiteInfo {station_num, ..SiteInfo::default()};
+            let new_site = SiteInfo {
+                station_num,
+                ..SiteInfo::default()
+            };
             match self.add_site(&new_site) {
-                Ok(())=> {},
+                Ok(()) => {}
                 Err(err) => return AddFileResult::Error(err),
             }
         }
@@ -130,22 +133,21 @@ impl Archive {
             .map(|_| {})
     }
 
-    /*
     /// Remove a file from the archive.
     pub fn remove(
         &self,
-        site: StationNumber,
+        station_num: StationNumber,
         model: Model,
-        init_time: &chrono::NaiveDateTime,
+        init_time: chrono::NaiveDateTime,
     ) -> Result<(), BufkitDataErr> {
-        unimplemented!()
-        /*
+        let station_num: u32 = Into::<u32>::into(station_num);
+
         let file_name: String = self.db_conn.query_row(
-            include_str!("add_data/find_file_name.sql"),
+            include_str!("modify/find_file_name.sql"),
             &[
-                &site.station_num as &dyn rusqlite::types::ToSql,
+                &station_num as &dyn rusqlite::types::ToSql,
                 &model.as_static_str() as &dyn rusqlite::types::ToSql,
-                init_time as &dyn rusqlite::types::ToSql,
+                &init_time as &dyn rusqlite::types::ToSql,
             ],
             |row| row.get(0),
         )?;
@@ -153,18 +155,16 @@ impl Archive {
         std::fs::remove_file(self.data_root().join(file_name)).map_err(BufkitDataErr::IO)?;
 
         self.db_conn.execute(
-            include_str!("add_data/delete_file.sql"),
+            include_str!("modify/delete_file.sql"),
             &[
-                &site.station_num as &dyn rusqlite::types::ToSql,
+                &station_num as &dyn rusqlite::types::ToSql,
                 &model.as_static_str() as &dyn rusqlite::types::ToSql,
-                init_time as &dyn rusqlite::types::ToSql,
+                &init_time as &dyn rusqlite::types::ToSql,
             ],
         )?;
 
         Ok(())
-        */
     }
-    */
 
     fn parse_site_info(
         text: &str,
