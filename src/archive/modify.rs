@@ -346,7 +346,7 @@ mod unit {
         fill_test_archive(&mut arch);
 
         let site = StationNumber::from(727730); // Station number for KMSO
-        let init_time = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let init_time = NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0);
         let model = Model::GFS;
 
         assert!(arch
@@ -370,7 +370,6 @@ mod unit {
 
         let station_num = StationNumber::from(727730); // Station number for KMSO
         let init_time_model_pairs = [
-            (NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0), Model::GFS),
             (NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0), Model::NAM),
             (NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0), Model::GFS),
             (
