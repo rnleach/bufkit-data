@@ -235,3 +235,89 @@ impl Archive {
         )
     }
 }
+
+#[cfg(test)]
+mod unit {
+    use super::*;
+    use crate::archive::unit::*; // Set up and tear down functions.
+
+    use chrono::NaiveDate;
+
+    #[test]
+    fn test_add() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+    }
+
+    #[test]
+    fn test_no_duplicate_sites() {
+        let TestArchive { tmp: _tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
+
+        let test_sites = &get_test_sites();
+
+        for site in test_sites {
+            arch.add_site(site).expect("Error adding site.");
+        }
+
+        // Try adding them again, this should fail.
+        for site in test_sites {
+            assert!(arch.add_site(site).is_err());
+        }
+    }
+
+    #[test]
+    fn test_update_site() {
+        let TestArchive { tmp: _tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
+
+        let test_sites = &get_test_sites();
+
+        for site in test_sites {
+            arch.add_site(site).expect("Error adding site.");
+        }
+
+        const STN: StationNumber = StationNumber::new(3);
+
+        let zootown = SiteInfo {
+            station_num: StationNumber::from(STN),
+            name: Some("Zootown".to_owned()),
+            notes: Some("Mountains, not coast.".to_owned()),
+            state: None,
+            auto_download: true,
+            time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
+        };
+
+        arch.update_site(&zootown).expect("Error updating site.");
+
+        assert_eq!(arch.site(STN).unwrap(), zootown);
+        assert_ne!(arch.site(STN).unwrap(), test_sites[2]);
+    }
+
+    #[test]
+    fn test_remove_file() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        let site = StationNumber::from(727730); // Station number for KMSO
+        let init_time = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let model = Model::GFS;
+
+        assert!(arch
+            .file_exists(site, model, &init_time)
+            .expect("Error checking db"));
+        arch.remove(site, model, init_time)
+            .expect("Error while removing.");
+        assert!(!arch
+            .file_exists(site, model, &init_time)
+            .expect("Error checking db"));
+    }
+}

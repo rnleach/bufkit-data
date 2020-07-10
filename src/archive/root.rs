@@ -51,3 +51,33 @@ impl Archive {
         self.root.join(Archive::DATA_DIR)
     }
 }
+
+#[cfg(test)]
+mod unit {
+    use super::*;
+    use crate::archive::unit::*; // Test setup and tear down.
+
+    #[test]
+    fn test_archive_create_new() {
+        assert!(create_test_archive().is_ok());
+    }
+
+    #[test]
+    fn test_archive_connect() {
+        let TestArchive { tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
+        drop(arch);
+
+        assert!(Archive::connect(&tmp.path()).is_ok());
+        assert!(Archive::connect(&"unlikely_directory_in_my_project").is_err());
+    }
+
+    #[test]
+    fn test_get_root() {
+        let TestArchive { tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
+
+        let root = arch.root();
+        assert_eq!(root, tmp.path());
+    }
+}

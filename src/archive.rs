@@ -53,13 +53,13 @@ mod unit {
     use sounding_bufkit::BufkitFile;
 
     // struct to hold temporary data for tests.
-    struct TestArchive {
-        tmp: TempDir,
-        arch: Archive,
+    pub(super) struct TestArchive {
+        pub tmp: TempDir,
+        pub arch: Archive,
     }
 
     // Function to create a new archive to test.
-    fn create_test_archive() -> Result<TestArchive, BufkitDataErr> {
+    pub(super) fn create_test_archive() -> Result<TestArchive, BufkitDataErr> {
         let tmp = TempDir::new("bufkit-data-test-archive")?;
         let arch = Archive::create(&tmp.path())?;
 
@@ -67,7 +67,7 @@ mod unit {
     }
 
     // Get some simplified data for testing.
-    fn get_test_data() -> [(String, Model, String); 10] {
+    pub(super) fn get_test_data() -> [(String, Model, String); 10] {
         [
             (
                 "KMSO".to_owned(),
@@ -123,7 +123,7 @@ mod unit {
     }
 
     // Function to fill the archive with some example data.
-    fn fill_test_archive(arch: &mut Archive) {
+    pub(super) fn fill_test_archive(arch: &mut Archive) {
         for (site, model, raw_data) in get_test_data().iter() {
             match arch.add(site, *model, raw_data) {
                 AddFileResult::Ok(_) | AddFileResult::New(_) => {}
@@ -137,7 +137,7 @@ mod unit {
     }
 
     // A handy set of sites to use when testing sites.
-    fn get_test_sites() -> [SiteInfo; 3] {
+    pub(super) fn get_test_sites() -> [SiteInfo; 3] {
         [
             SiteInfo {
                 station_num: StationNumber::from(1),
@@ -167,47 +167,6 @@ mod unit {
     }
 
     #[test]
-    fn test_archive_create_new() {
-        assert!(create_test_archive().is_ok());
-    }
-
-    #[test]
-    fn test_archive_connect() {
-        let TestArchive { tmp, arch } =
-            create_test_archive().expect("Failed to create test archive.");
-        drop(arch);
-
-        assert!(Archive::connect(&tmp.path()).is_ok());
-        assert!(Archive::connect(&"unlikely_directory_in_my_project").is_err());
-    }
-
-    #[test]
-    fn test_get_root() {
-        let TestArchive { tmp, arch } =
-            create_test_archive().expect("Failed to create test archive.");
-
-        let root = arch.root();
-        assert_eq!(root, tmp.path());
-    }
-
-    #[test]
-    fn test_no_duplicate_sites() {
-        let TestArchive { tmp: _tmp, arch } =
-            create_test_archive().expect("Failed to create test archive.");
-
-        let test_sites = &get_test_sites();
-
-        for site in test_sites {
-            arch.add_site(site).expect("Error adding site.");
-        }
-
-        // Try adding them again, this should fail.
-        for site in test_sites {
-            assert!(arch.add_site(site).is_err());
-        }
-    }
-
-    #[test]
     fn test_sites_round_trip() {
         let TestArchive { tmp: _tmp, arch } =
             create_test_archive().expect("Failed to create test archive.");
@@ -227,112 +186,6 @@ mod unit {
                 .find(|st| st.station_num == site.station_num)
                 .is_some());
         }
-    }
-
-    #[test]
-    fn test_site_info() {
-        let TestArchive { tmp: _tmp, arch } =
-            create_test_archive().expect("Failed to create test archive.");
-
-        let test_sites = &get_test_sites();
-
-        for site in test_sites {
-            arch.add_site(site).expect("Error adding site.");
-        }
-
-        let si = arch
-            .site(StationNumber::from(1))
-            .expect("Error retrieving site.");
-        assert_eq!(si.name, Some("Chicago/O'Hare".to_owned()));
-        assert_eq!(si.notes, Some("Major air travel hub.".to_owned()));
-        assert_eq!(si.state, Some(StateProv::IL));
-        assert_eq!(si.auto_download, false);
-        assert_eq!(si.time_zone, None);
-
-        let si = arch
-            .site(StationNumber::from(2))
-            .expect("Error retrieving site.");
-        assert_eq!(si.name, Some("Seattle".to_owned()));
-        assert_eq!(
-            si.notes,
-            Some("A coastal city with coffe and rain".to_owned())
-        );
-        assert_eq!(si.state, Some(StateProv::WA));
-        assert_eq!(si.auto_download, true);
-        assert_eq!(si.time_zone, Some(chrono::FixedOffset::west(8 * 3600)));
-
-        let si = arch
-            .site(StationNumber::from(3))
-            .expect("Error retrieving site.");
-        assert_eq!(si.name, Some("Missoula".to_owned()));
-        assert_eq!(si.notes, Some("In a valley.".to_owned()));
-        assert_eq!(si.state, None);
-        assert_eq!(si.auto_download, true);
-        assert_eq!(si.time_zone, Some(chrono::FixedOffset::west(7 * 3600)));
-
-        assert!(arch.site(StationNumber::from(0)).is_none());
-        assert!(arch.site(StationNumber::from(100)).is_none());
-    }
-
-    #[test]
-    fn test_update_site() {
-        let TestArchive { tmp: _tmp, arch } =
-            create_test_archive().expect("Failed to create test archive.");
-
-        let test_sites = &get_test_sites();
-
-        for site in test_sites {
-            arch.add_site(site).expect("Error adding site.");
-        }
-
-        const STN: StationNumber = StationNumber::new(3);
-
-        let zootown = SiteInfo {
-            station_num: StationNumber::from(STN),
-            name: Some("Zootown".to_owned()),
-            notes: Some("Mountains, not coast.".to_owned()),
-            state: None,
-            auto_download: true,
-            time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
-        };
-
-        arch.update_site(&zootown).expect("Error updating site.");
-
-        assert_eq!(arch.site(STN).unwrap(), zootown);
-        assert_ne!(arch.site(STN).unwrap(), test_sites[2]);
-    }
-
-    #[test]
-    fn test_add() {
-        let TestArchive {
-            tmp: _tmp,
-            mut arch,
-        } = create_test_archive().expect("Failed to create test archive.");
-
-        fill_test_archive(&mut arch);
-    }
-
-    #[test]
-    fn test_remove_file() {
-        let TestArchive {
-            tmp: _tmp,
-            mut arch,
-        } = create_test_archive().expect("Failed to create test archive.");
-
-        fill_test_archive(&mut arch);
-
-        let site = StationNumber::from(727730); // Station number for KMSO
-        let init_time = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
-        let model = Model::GFS;
-
-        assert!(arch
-            .file_exists(site, model, &init_time)
-            .expect("Error checking db"));
-        arch.remove(site, model, init_time)
-            .expect("Error while removing.");
-        assert!(!arch
-            .file_exists(site, model, &init_time)
-            .expect("Error checking db"));
     }
 
     /*

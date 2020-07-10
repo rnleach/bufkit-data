@@ -260,3 +260,54 @@ impl Archive {
         }
     */
 }
+
+#[cfg(test)]
+mod unit {
+    use super::*;
+    use crate::archive::unit::*; // test helpers.
+
+    #[test]
+    fn test_site_info() {
+        let TestArchive { tmp: _tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
+
+        let test_sites = &get_test_sites();
+
+        for site in test_sites {
+            arch.add_site(site).expect("Error adding site.");
+        }
+
+        let si = arch
+            .site(StationNumber::from(1))
+            .expect("Error retrieving site.");
+        assert_eq!(si.name, Some("Chicago/O'Hare".to_owned()));
+        assert_eq!(si.notes, Some("Major air travel hub.".to_owned()));
+        assert_eq!(si.state, Some(StateProv::IL));
+        assert_eq!(si.auto_download, false);
+        assert_eq!(si.time_zone, None);
+
+        let si = arch
+            .site(StationNumber::from(2))
+            .expect("Error retrieving site.");
+        assert_eq!(si.name, Some("Seattle".to_owned()));
+        assert_eq!(
+            si.notes,
+            Some("A coastal city with coffe and rain".to_owned())
+        );
+        assert_eq!(si.state, Some(StateProv::WA));
+        assert_eq!(si.auto_download, true);
+        assert_eq!(si.time_zone, Some(chrono::FixedOffset::west(8 * 3600)));
+
+        let si = arch
+            .site(StationNumber::from(3))
+            .expect("Error retrieving site.");
+        assert_eq!(si.name, Some("Missoula".to_owned()));
+        assert_eq!(si.notes, Some("In a valley.".to_owned()));
+        assert_eq!(si.state, None);
+        assert_eq!(si.auto_download, true);
+        assert_eq!(si.time_zone, Some(chrono::FixedOffset::west(7 * 3600)));
+
+        assert!(arch.site(StationNumber::from(0)).is_none());
+        assert!(arch.site(StationNumber::from(100)).is_none());
+    }
+}
