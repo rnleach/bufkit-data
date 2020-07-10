@@ -2,10 +2,16 @@
 
 use std::{collections::HashSet, convert::TryFrom, io::Read, str::FromStr};
 
-use crate::{coords::Coords, errors::BufkitDataErr, models::Model, site::Site};
+use crate::{
+    coords::Coords,
+    errors::BufkitDataErr,
+    models::Model,
+    site::{SiteInfo, StationNumber},
+};
 
 use super::Archive;
 
+/*
 // FIXME: Completely redo this.
 impl Archive {
     /// Validate files listed in the index are in the archive too, if not remove them from the
@@ -220,3 +226,4 @@ impl Archive {
         Some((init_time, end_time, model, site, coords))
     }
 }
+*/

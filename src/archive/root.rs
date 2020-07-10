@@ -38,8 +38,6 @@ impl Archive {
             rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
         )?;
 
-        Self::validate_db_structure(&db_conn)?;
-
         Ok(Archive { root, db_conn })
     }
 
@@ -51,43 +49,5 @@ impl Archive {
     /// Get the directory the data files are stored in.
     pub(crate) fn data_root(&self) -> PathBuf {
         self.root.join(Archive::DATA_DIR)
-    }
-
-    /// Validate the database structure is correct.
-    fn validate_db_structure(db_conn: &rusqlite::Connection) -> Result<(), BufkitDataErr> {
-        // Check the number of tables
-        let num_tables: i64 = db_conn.query_row(
-            "SELECT COUNT(name) FROM sqlite_master WHERE type='table' ORDER BY name",
-            rusqlite::NO_PARAMS,
-            |row| row.get(0),
-        )?;
-
-        if num_tables != 4 {
-            return Err(BufkitDataErr::InvalidSchema);
-        }
-
-        // Check the table names.
-        let mut stmt =
-            db_conn.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?;
-
-        let iter = stmt.query_map(rusqlite::NO_PARAMS, |row: &rusqlite::Row| {
-            let name: String = row.get(0)?;
-
-            if name == "files" || name == "sites" || name == "site_ids" || name == "coords" {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        })?;
-
-        for valid in iter {
-            match valid {
-                Ok(true) => {}
-                Ok(false) => return Err(BufkitDataErr::InvalidSchema),
-                Err(err) => return Err(err.into()),
-            }
-        }
-
-        Ok(())
     }
 }

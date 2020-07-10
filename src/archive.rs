@@ -1,7 +1,7 @@
 //! An archive of bufkit soundings.
 
 #[cfg(test)]
-use crate::{BufkitDataErr, Inventory, Model, Site, StateProv};
+use crate::{BufkitDataErr, Model, SiteInfo, StateProv, StationNumber};
 use std::path::PathBuf;
 
 /// The archive.
@@ -11,8 +11,8 @@ pub struct Archive {
     db_conn: rusqlite::Connection, // An sqlite connection.
 }
 
-mod add_data;
-pub use add_data::AddFileResult;
+mod modify;
+pub use modify::AddFileResult;
 mod clean;
 mod query;
 mod root;
@@ -22,14 +22,14 @@ impl Archive {
     #[cfg(test)]
     fn file_exists(
         &self,
-        site: &Site,
+        site: StationNumber,
         model: Model,
         init_time: &chrono::NaiveDateTime,
     ) -> Result<bool, BufkitDataErr> {
         let num_records: i32 = self.db_conn.query_row(
             "SELECT COUNT(*) FROM files WHERE station_num = ?1 AND model = ?2 AND init_time = ?3",
             &[
-                &site.station_num as &dyn rusqlite::types::ToSql,
+                &Into::<i64>::into(site) as &dyn rusqlite::types::ToSql,
                 &model.as_static_str() as &dyn rusqlite::types::ToSql,
                 init_time as &dyn rusqlite::types::ToSql,
             ],
@@ -43,7 +43,7 @@ impl Archive {
 #[cfg(test)]
 mod unit {
     use super::*;
-    use crate::{coords::Coords, Model};
+    use crate::{coords::Coords, Model, StationNumber};
 
     use std::fs::read_dir;
 
@@ -66,61 +66,104 @@ mod unit {
         Ok(TestArchive { tmp, arch })
     }
 
-    // Function to fetch a list of test files.
-    fn get_test_data() -> Result<Vec<(String, Model, String)>, BufkitDataErr> {
-        let path = PathBuf::new().join("example_data");
-
-        let files = read_dir(path)?
-            .filter_map(|entry| entry.ok())
-            .filter_map(|entry| {
-                entry.file_type().ok().and_then(|ft| {
-                    if ft.is_file() {
-                        Some(entry.path())
-                    } else {
-                        None
-                    }
-                })
-            });
-
-        let mut to_return = vec![];
-
-        for path in files {
-            let bufkit_file = BufkitFile::load(&path)?;
-
-            let model = if path.to_string_lossy().to_string().contains("gfs") {
-                Model::GFS
-            } else {
-                Model::NAM
-            };
-            let site = if path.to_string_lossy().to_string().contains("kmso") {
-                "kmso".to_owned()
-            } else {
-                panic!("Unprepared for this test data!");
-            };
-
-            let raw_string = bufkit_file.raw_text();
-
-            to_return.push((site, model, raw_string.to_owned()))
-        }
-
-        Ok(to_return)
+    // Get some simplified data for testing.
+    fn get_test_data() -> [(String, Model, String); 10] {
+        [
+            (
+                "KMSO".to_owned(),
+                Model::GFS,
+                include_str!("../example_data/2017040100Z_gfs3_kmso.buf").to_owned(),
+            ),
+            (
+                "KMSO".to_owned(),
+                Model::GFS,
+                include_str!("../example_data/2017040100Z_gfs_kmso.buf").to_owned(),
+            ),
+            (
+                "KMSO".to_owned(),
+                Model::NAM,
+                include_str!("../example_data/2017040100Z_nam_kmso.buf").to_owned(),
+            ),
+            (
+                "KMSO".to_owned(),
+                Model::GFS,
+                include_str!("../example_data/2017040106Z_gfs3_kmso.buf").to_owned(),
+            ),
+            (
+                "KMSO".to_owned(),
+                Model::GFS,
+                include_str!("../example_data/2017040106Z_gfs3_kmso.buf").to_owned(),
+            ),
+            (
+                "KMSO".to_owned(),
+                Model::GFS,
+                include_str!("../example_data/2017040112Z_gfs3_kmso.buf").to_owned(),
+            ),
+            (
+                "KMSO".to_owned(),
+                Model::NAM,
+                include_str!("../example_data/2017040112Z_nam_kmso.buf").to_owned(),
+            ),
+            (
+                "KMSO".to_owned(),
+                Model::GFS,
+                include_str!("../example_data/2017040118Z_gfs3_kmso.buf").to_owned(),
+            ),
+            (
+                "KMSO".to_owned(),
+                Model::GFS,
+                include_str!("../example_data/2017040118Z_gfs_kmso.buf").to_owned(),
+            ),
+            (
+                "KMSO".to_owned(),
+                Model::NAM4KM,
+                include_str!("../example_data/2017040118Z_namm_kmso.buf").to_owned(),
+            ),
+        ]
     }
 
     // Function to fill the archive with some example data.
-    fn fill_test_archive(arch: &mut Archive) -> Result<(), BufkitDataErr> {
-        let test_data = get_test_data().expect("Error loading test data.");
-
-        for (site, model, raw_data) in test_data {
-            match arch.add(&site, model, &raw_data) {
+    fn fill_test_archive(arch: &mut Archive) {
+        for (site, model, raw_data) in get_test_data().iter() {
+            match arch.add(site, *model, raw_data) {
                 AddFileResult::Ok(_) | AddFileResult::New(_) => {}
                 AddFileResult::Error(err) => {
                     println!("{:?}", err);
-                    panic!("Test archivve error filling.");
+                    panic!("Test archive error filling.");
                 }
                 _ => panic!("Test archive error filling."),
             }
         }
-        Ok(())
+    }
+
+    // A handy set of sites to use when testing sites.
+    fn get_test_sites() -> [SiteInfo; 3] {
+        [
+            SiteInfo {
+                station_num: StationNumber::from(1),
+                name: Some("Chicago/O'Hare".to_owned()),
+                notes: Some("Major air travel hub.".to_owned()),
+                state: Some(StateProv::IL),
+                auto_download: false,
+                time_zone: None,
+            },
+            SiteInfo {
+                station_num: StationNumber::from(2),
+                name: Some("Seattle".to_owned()),
+                notes: Some("A coastal city with coffe and rain".to_owned()),
+                state: Some(StateProv::WA),
+                auto_download: true,
+                time_zone: Some(chrono::FixedOffset::west(8 * 3600)),
+            },
+            SiteInfo {
+                station_num: StationNumber::from(3),
+                name: Some("Missoula".to_owned()),
+                notes: Some("In a valley.".to_owned()),
+                state: None,
+                auto_download: true,
+                time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
+            },
+        ]
     }
 
     #[test]
@@ -148,200 +191,104 @@ mod unit {
     }
 
     #[test]
+    fn test_no_duplicate_sites() {
+        let TestArchive { tmp: _tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
+
+        let test_sites = &get_test_sites();
+
+        for site in test_sites {
+            arch.add_site(site).expect("Error adding site.");
+        }
+
+        // Try adding them again, this should fail.
+        for site in test_sites {
+            assert!(arch.add_site(site).is_err());
+        }
+    }
+
+    #[test]
     fn test_sites_round_trip() {
         let TestArchive { tmp: _tmp, arch } =
             create_test_archive().expect("Failed to create test archive.");
 
-        let test_sites = &[
-            (
-                Site {
-                    id: Some("kord".to_uppercase()),
-                    station_num: 1,
-                    name: Some("Chicago/O'Hare".to_owned()),
-                    notes: Some("Major air travel hub.".to_owned()),
-                    state: Some(StateProv::IL),
-                    auto_download: false,
-                    time_zone: None,
-                },
-                Coords {
-                    lat: 41.979_72,
-                    lon: -87.904_44,
-                },
-            ),
-            (
-                Site {
-                    id: Some("ksea".to_uppercase()),
-                    station_num: 2,
-                    name: Some("Seattle".to_owned()),
-                    notes: Some("A coastal city with coffe and rain".to_owned()),
-                    state: Some(StateProv::WA),
-                    auto_download: true,
-                    time_zone: Some(chrono::FixedOffset::west(8 * 3600)),
-                },
-                Coords {
-                    lat: 47.444_72,
-                    lon: -122.313_61,
-                },
-            ),
-            (
-                Site {
-                    id: Some("kmso".to_uppercase()),
-                    station_num: 3,
-                    name: Some("Missoula".to_owned()),
-                    notes: Some("In a valley.".to_owned()),
-                    state: None,
-                    auto_download: true,
-                    time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
-                },
-                Coords {
-                    lat: 46.920_83,
-                    lon: -114.092_50,
-                },
-            ),
-        ];
+        let test_sites = &get_test_sites();
 
-        for &(ref site, coords) in test_sites {
-            arch.add_site(site, coords).expect("Error adding site.");
+        for site in test_sites {
+            arch.add_site(site).expect("Error adding site.");
         }
-
-        assert!(arch.site_for_id("ksea").is_some());
-        assert!(arch.site_for_id("kord").is_some());
-        assert!(arch.site_for_id("xyz").is_none());
 
         let retrieved_sites = arch.sites().expect("Error retrieving sites.");
 
         for site in retrieved_sites {
             println!("{:#?}", site);
-            assert!(
-                test_sites
-                    .iter()
-                    .find(|(st, _)| st.station_num == site.station_num)
-                    .is_some()
-                    && test_sites.iter().find(|(st, _)| st.id == site.id).is_some()
-            );
+            assert!(test_sites
+                .iter()
+                .find(|st| st.station_num == site.station_num)
+                .is_some());
         }
     }
 
     #[test]
-    fn test_get_site_info() {
+    fn test_site_info() {
         let TestArchive { tmp: _tmp, arch } =
             create_test_archive().expect("Failed to create test archive.");
 
-        let test_sites = &[
-            (
-                Site {
-                    id: Some("kord".to_uppercase()),
-                    station_num: 1,
-                    name: Some("Chicago/O'Hare".to_owned()),
-                    notes: Some("Major air travel hub.".to_owned()),
-                    state: Some(StateProv::IL),
-                    auto_download: false,
-                    time_zone: None,
-                },
-                Coords {
-                    lat: 41.979_72,
-                    lon: -87.904_44,
-                },
-            ),
-            (
-                Site {
-                    id: Some("ksea".to_uppercase()),
-                    station_num: 2,
-                    name: Some("Seattle".to_owned()),
-                    notes: Some("A coastal city with coffe and rain".to_owned()),
-                    state: Some(StateProv::WA),
-                    auto_download: true,
-                    time_zone: Some(chrono::FixedOffset::west(8 * 3600)),
-                },
-                Coords {
-                    lat: 47.444_72,
-                    lon: -122.313_61,
-                },
-            ),
-            (
-                Site {
-                    id: Some("kmso".to_uppercase()),
-                    station_num: 3,
-                    name: Some("Missoula".to_owned()),
-                    notes: Some("In a valley.".to_owned()),
-                    state: None,
-                    auto_download: true,
-                    time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
-                },
-                Coords {
-                    lat: 46.920_83,
-                    lon: -114.092_50,
-                },
-            ),
-        ];
+        let test_sites = &get_test_sites();
 
-        for &(ref site, coords) in test_sites {
-            arch.add_site(site, coords).expect("Error adding site.");
+        for site in test_sites {
+            arch.add_site(site).expect("Error adding site.");
         }
 
-        assert_eq!(arch.site_for_id("ksea").unwrap(), test_sites[1].0);
+        let si = arch
+            .site(StationNumber::from(1))
+            .expect("Error retrieving site.");
+        assert_eq!(si.name, Some("Chicago/O'Hare".to_owned()));
+        assert_eq!(si.notes, Some("Major air travel hub.".to_owned()));
+        assert_eq!(si.state, Some(StateProv::IL));
+        assert_eq!(si.auto_download, false);
+        assert_eq!(si.time_zone, None);
+
+        let si = arch
+            .site(StationNumber::from(2))
+            .expect("Error retrieving site.");
+        assert_eq!(si.name, Some("Seattle".to_owned()));
+        assert_eq!(
+            si.notes,
+            Some("A coastal city with coffe and rain".to_owned())
+        );
+        assert_eq!(si.state, Some(StateProv::WA));
+        assert_eq!(si.auto_download, true);
+        assert_eq!(si.time_zone, Some(chrono::FixedOffset::west(8 * 3600)));
+
+        let si = arch
+            .site(StationNumber::from(3))
+            .expect("Error retrieving site.");
+        assert_eq!(si.name, Some("Missoula".to_owned()));
+        assert_eq!(si.notes, Some("In a valley.".to_owned()));
+        assert_eq!(si.state, None);
+        assert_eq!(si.auto_download, true);
+        assert_eq!(si.time_zone, Some(chrono::FixedOffset::west(7 * 3600)));
+
+        assert!(arch.site(StationNumber::from(0)).is_none());
+        assert!(arch.site(StationNumber::from(100)).is_none());
     }
 
     #[test]
-    fn test_set_site_info() {
+    fn test_update_site() {
         let TestArchive { tmp: _tmp, arch } =
             create_test_archive().expect("Failed to create test archive.");
 
-        let test_sites = &[
-            (
-                Site {
-                    id: Some("kord".to_uppercase()),
-                    station_num: 1,
-                    name: Some("Chicago/O'Hare".to_owned()),
-                    notes: Some("Major air travel hub.".to_owned()),
-                    state: Some(StateProv::IL),
-                    auto_download: false,
-                    time_zone: None,
-                },
-                Coords {
-                    lat: 41.979_72,
-                    lon: -87.904_44,
-                },
-            ),
-            (
-                Site {
-                    id: Some("ksea".to_uppercase()),
-                    station_num: 2,
-                    name: Some("Seattle".to_owned()),
-                    notes: Some("A coastal city with coffe and rain".to_owned()),
-                    state: Some(StateProv::WA),
-                    auto_download: true,
-                    time_zone: Some(chrono::FixedOffset::west(8 * 3600)),
-                },
-                Coords {
-                    lat: 47.444_72,
-                    lon: -122.313_61,
-                },
-            ),
-            (
-                Site {
-                    id: Some("kmso".to_uppercase()),
-                    station_num: 3,
-                    name: Some("Missoula".to_owned()),
-                    notes: Some("In a valley.".to_owned()),
-                    state: None,
-                    auto_download: true,
-                    time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
-                },
-                Coords {
-                    lat: 46.920_83,
-                    lon: -114.092_50,
-                },
-            ),
-        ];
+        let test_sites = &get_test_sites();
 
-        for &(ref site, coords) in test_sites {
-            arch.add_site(site, coords).expect("Error adding site.");
+        for site in test_sites {
+            arch.add_site(site).expect("Error adding site.");
         }
 
-        let zootown = Site {
-            station_num: 3,
-            id: Some("kmso".to_uppercase()),
+        const STN: StationNumber = StationNumber::new(3);
+
+        let zootown = SiteInfo {
+            station_num: StationNumber::from(STN),
             name: Some("Zootown".to_owned()),
             notes: Some("Mountains, not coast.".to_owned()),
             state: None,
@@ -351,10 +298,21 @@ mod unit {
 
         arch.update_site(&zootown).expect("Error updating site.");
 
-        assert_eq!(arch.site_for_id("kmso").unwrap(), zootown);
-        assert_ne!(arch.site_for_id("kmso").unwrap(), test_sites[2].0);
+        assert_eq!(arch.site(STN).unwrap(), zootown);
+        assert_ne!(arch.site(STN).unwrap(), test_sites[2]);
     }
 
+    #[test]
+    fn test_add() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+    }
+
+    /*
     #[test]
     fn test_models_for_site() {
         let TestArchive {
@@ -581,4 +539,5 @@ mod unit {
             .file_exists(&site, model, &init_time)
             .expect("Error checking db"));
     }
+    */
 }

@@ -4,28 +4,18 @@ use super::Archive;
 
 use crate::{
     errors::BufkitDataErr,
-    inventory::Inventory,
     models::Model,
-    site::{Site, StateProv},
+    site::{SiteInfo, StateProv, StationNumber},
 };
 
 impl Archive {
     /// Retrieve a list of sites in the archive.
-    pub fn sites(&self) -> Result<Vec<Site>, BufkitDataErr> {
-        let mut stmt = self.db_conn.prepare(
-            "
-                SELECT 
-                    sites.station_num,
-                    site_ids.id,
-                    name,
-                    state,
-                    notes,
-                    auto_download,
-                    tz_offset_sec 
-            FROM sites JOIN site_ids ON sites.station_num = site_ids.station_num",
-        )?;
+    pub fn sites(&self) -> Result<Vec<SiteInfo>, BufkitDataErr> {
+        let mut stmt = self
+            .db_conn
+            .prepare(include_str!("query/retrieve_sites.sql"))?;
 
-        let vals: Result<Vec<Site>, BufkitDataErr> = stmt
+        let vals: Result<Vec<SiteInfo>, BufkitDataErr> = stmt
             .query_and_then(rusqlite::NO_PARAMS, Self::parse_row_to_site)?
             .map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
@@ -33,34 +23,65 @@ impl Archive {
         vals
     }
 
+    fn parse_row_to_site(row: &rusqlite::Row) -> Result<SiteInfo, rusqlite::Error> {
+        let station_num: u32 = row.get(0)?;
+        let station_num = StationNumber::from(station_num);
+
+        let name: Option<String> = row.get(1)?;
+        let notes: Option<String> = row.get(3)?;
+        let auto_download: bool = row.get(4)?;
+        let state: Option<StateProv> = row
+            .get::<_, String>(2)
+            .ok()
+            .and_then(|a_string| StateProv::from_str(&a_string).ok());
+
+        let time_zone: Option<chrono::FixedOffset> =
+            row.get::<_, i32>(5).ok().map(|offset: i32| {
+                if offset < 0 {
+                    chrono::FixedOffset::west(offset.abs())
+                } else {
+                    chrono::FixedOffset::east(offset)
+                }
+            });
+
+        Ok(SiteInfo {
+            station_num,
+            name,
+            notes,
+            state,
+            auto_download,
+            time_zone,
+        })
+    }
+
     /// Retrieve the information about a single site id
-    pub fn site(&self, station_num: u32) -> Option<Site> {
+    pub fn site(&self, station_num: StationNumber) -> Option<SiteInfo> {
         self.db_conn
             .query_row_and_then(
                 "
-                    SELECT 
-                         sites.station_num,
-                         site_ids.id,
+                    SELECT
+                         station_num,
                          name,
                          state,
                          notes,
                          auto_download,
                          tz_offset_sec
-                    FROM sites LEFT JOIN site_ids ON sites.station_num = site_ids.station_num
-                    WHERE sites.station_num = ?1
+                    FROM sites 
+                    WHERE station_num = ?1
                 ",
-                &[&station_num],
+                &[&Into::<u32>::into(station_num)],
                 Self::parse_row_to_site,
             )
             .ok()
     }
 
+    /*
     /// Given a site_id string, get the corresponding Site object.
     pub fn site_for_id(&self, site_id: &str) -> Option<Site> {
         self.db_conn
             .query_row_and_then(
                 "
-                    SELECT 
+                    SELECT
                          sites.station_num,
                          site_ids.id,
                          name,
@@ -147,123 +168,95 @@ impl Archive {
         let init_times = self.init_times(site, model)?;
         Inventory::new(init_times, model, site)
     }
+    */
 
-    fn parse_row_to_site(row: &rusqlite::Row) -> Result<Site, rusqlite::Error> {
-        let station_num: u32 = row.get(0)?;
-        let id: Option<String> = row.get(1)?;
-        let name: Option<String> = row.get(2)?;
-        let notes: Option<String> = row.get(4)?;
-        let auto_download: bool = row.get(5)?;
-        let state: Option<StateProv> = row
-            .get::<_, String>(3)
-            .ok()
-            .and_then(|a_string| StateProv::from_str(&a_string).ok());
+    /*
+        /// Get a list of all the available model initialization times for a given site and model.
+        pub(crate) fn init_times(
+            &self,
+            site: &Site,
+            model: Model,
+        ) -> Result<Vec<chrono::NaiveDateTime>, BufkitDataErr> {
+            let mut stmt = self.db_conn.prepare(
+                "
+                    SELECT init_time FROM files
+                    WHERE station_num = ?1 AND model = ?2
+                    ORDER BY init_time ASC
+                ",
+            )?;
 
-        let time_zone: Option<chrono::FixedOffset> =
-            row.get::<_, i32>(6).ok().map(|offset: i32| {
-                if offset < 0 {
-                    chrono::FixedOffset::west(offset.abs())
-                } else {
-                    chrono::FixedOffset::east(offset)
-                }
-            });
+            let init_times: Vec<Result<chrono::NaiveDateTime, _>> = stmt
+                .query_map(
+                    &[
+                        &site.station_num as &dyn rusqlite::ToSql,
+                        &model.as_static_str() as &dyn rusqlite::ToSql,
+                    ],
+                    |row| row.get::<_, chrono::NaiveDateTime>(0),
+                )?
+                .map(|res| res.map_err(BufkitDataErr::Database))
+                .collect();
 
-        Ok(Site {
-            station_num,
-            id,
-            name,
-            notes,
-            state,
-            auto_download,
-            time_zone,
-        })
-    }
+            let init_times: Vec<chrono::NaiveDateTime> =
+                init_times.into_iter().filter_map(Result::ok).collect();
 
-    /// Get a list of all the available model initialization times for a given site and model.
-    pub(crate) fn init_times(
-        &self,
-        site: &Site,
-        model: Model,
-    ) -> Result<Vec<chrono::NaiveDateTime>, BufkitDataErr> {
-        let mut stmt = self.db_conn.prepare(
-            "
-                SELECT init_time FROM files
-                WHERE station_num = ?1 AND model = ?2
-                ORDER BY init_time ASC
-            ",
-        )?;
+            Ok(init_times)
+        }
 
-        let init_times: Vec<Result<chrono::NaiveDateTime, _>> = stmt
-            .query_map(
+        /// Retrieve the model initialization time of the most recent model in the archive.
+        pub(crate) fn most_recent_init_time(
+            &self,
+            site: &Site,
+            model: Model,
+        ) -> Result<chrono::NaiveDateTime, BufkitDataErr> {
+            let init_time: chrono::NaiveDateTime = self.db_conn.query_row(
+                "
+                    SELECT init_time FROM files
+                    WHERE station_num = ?1 AND model = ?2
+                    ORDER BY init_time DESC
+                    LIMIT 1
+                ",
                 &[
                     &site.station_num as &dyn rusqlite::ToSql,
                     &model.as_static_str() as &dyn rusqlite::ToSql,
                 ],
-                |row| row.get::<_, chrono::NaiveDateTime>(0),
-            )?
-            .map(|res| res.map_err(BufkitDataErr::Database))
-            .collect();
+                |row| row.get(0),
+            )?;
 
-        let init_times: Vec<chrono::NaiveDateTime> =
-            init_times.into_iter().filter_map(Result::ok).collect();
+            Ok(init_time)
+        }
 
-        Ok(init_times)
-    }
+        /// Retrieve all the initialization times of all sounding files that have a sounding with a
+        /// valid time in the specified range (inclusive).
+        pub(crate) fn init_times_for_soundings_valid_between(
+            &self,
+            start: chrono::NaiveDateTime,
+            end: chrono::NaiveDateTime,
+            site: &Site,
+            model: Model,
+        ) -> Result<Vec<chrono::NaiveDateTime>, BufkitDataErr> {
+            let mut stmt = self.db_conn.prepare(
+                "
+                    SELECT init_time
+                    FROM files
+                    WHERE station_num = ?1 AND model = ?2 AND init_time <= ?4 AND end_time >= ?3
+                    ORDER BY init_time ASC
+                ",
+            )?;
 
-    /// Retrieve the model initialization time of the most recent model in the archive.
-    pub(crate) fn most_recent_init_time(
-        &self,
-        site: &Site,
-        model: Model,
-    ) -> Result<chrono::NaiveDateTime, BufkitDataErr> {
-        let init_time: chrono::NaiveDateTime = self.db_conn.query_row(
-            "
-                SELECT init_time FROM files
-                WHERE station_num = ?1 AND model = ?2
-                ORDER BY init_time DESC
-                LIMIT 1
-            ",
-            &[
-                &site.station_num as &dyn rusqlite::ToSql,
-                &model.as_static_str() as &dyn rusqlite::ToSql,
-            ],
-            |row| row.get(0),
-        )?;
+            let init_times: Result<Vec<chrono::NaiveDateTime>, _> = stmt
+                .query_map(
+                    &[
+                        &site.station_num as &dyn rusqlite::types::ToSql,
+                        &model.as_static_str() as &dyn rusqlite::types::ToSql,
+                        &start as &dyn rusqlite::types::ToSql,
+                        &end as &dyn rusqlite::types::ToSql,
+                    ],
+                    |row| row.get::<_, chrono::NaiveDateTime>(0),
+                )?
+                .map(|res| res.map_err(BufkitDataErr::Database))
+                .collect();
 
-        Ok(init_time)
-    }
-
-    /// Retrieve all the initialization times of all sounding files that have a sounding with a
-    /// valid time in the specified range (inclusive).
-    pub(crate) fn init_times_for_soundings_valid_between(
-        &self,
-        start: chrono::NaiveDateTime,
-        end: chrono::NaiveDateTime,
-        site: &Site,
-        model: Model,
-    ) -> Result<Vec<chrono::NaiveDateTime>, BufkitDataErr> {
-        let mut stmt = self.db_conn.prepare(
-            "
-                SELECT init_time
-                FROM files
-                WHERE station_num = ?1 AND model = ?2 AND init_time <= ?4 AND end_time >= ?3
-                ORDER BY init_time ASC
-            ",
-        )?;
-
-        let init_times: Result<Vec<chrono::NaiveDateTime>, _> = stmt
-            .query_map(
-                &[
-                    &site.station_num as &dyn rusqlite::types::ToSql,
-                    &model.as_static_str() as &dyn rusqlite::types::ToSql,
-                    &start as &dyn rusqlite::types::ToSql,
-                    &end as &dyn rusqlite::types::ToSql,
-                ],
-                |row| row.get::<_, chrono::NaiveDateTime>(0),
-            )?
-            .map(|res| res.map_err(BufkitDataErr::Database))
-            .collect();
-
-        init_times
-    }
+            init_times
+        }
+    */
 }

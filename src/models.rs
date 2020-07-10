@@ -44,9 +44,7 @@ impl Model {
     /// Get the number of hours between runs.
     pub fn hours_between_runs(self) -> i64 {
         match self {
-            Model::GFS => 6,
-            Model::NAM => 6,
-            Model::NAM4KM => 6,
+            Model::GFS | Model::NAM | Model::NAM4KM => 6,
         }
     }
 
@@ -56,7 +54,9 @@ impl Model {
     /// allows you to reconstruct these times. Note that SREF starts at 03Z and runs every 6 hours,
     /// so it is different.
     pub fn base_hour(self) -> i64 {
-        0
+        match self {
+            Model::GFS | Model::NAM | Model::NAM4KM => 0,
+        }
     }
 
     /// Create an iterator of all the model runs between two times

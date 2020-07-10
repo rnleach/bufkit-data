@@ -15,8 +15,6 @@ pub enum BufkitDataErr {
     // Inherited errors from std
     /// Error forwarded from std
     IO(::std::io::Error),
-    /// Error sending message...
-    SenderError(::std::sync::mpsc::SendError<String>),
 
     // Other forwarded errors
     /// Database error
@@ -52,7 +50,6 @@ impl Display for BufkitDataErr {
             SoundingBufkit(err) => write!(f, "error from sounding-bufkit: {}", err),
 
             IO(err) => write!(f, "std lib io error: {}", err),
-            SenderError(err) => write!(f, "error sending message across threads: {}", err),
 
             Database(err) => write!(f, "database error: {}", err),
             StrumError(err) => write!(f, "error forwarded from strum crate: {}", err),

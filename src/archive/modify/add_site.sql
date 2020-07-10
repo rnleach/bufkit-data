@@ -5,8 +5,6 @@ INSERT INTO sites
     state,
     notes,
     tz_offset_sec,
-    auto_download,
-    mean_lat,
-    mean_lon
+    auto_download
 )
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
