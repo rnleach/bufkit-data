@@ -116,7 +116,7 @@ mod unit {
             ),
             (
                 "KMSO".to_owned(),
-                Model::NAM4KM,
+                Model::NAM,
                 include_str!("../example_data/2017040118Z_namm_kmso.buf").to_owned(),
             ),
         ]

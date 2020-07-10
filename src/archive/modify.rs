@@ -155,13 +155,51 @@ impl Archive {
         std::fs::remove_file(self.data_root().join(file_name)).map_err(BufkitDataErr::IO)?;
 
         self.db_conn.execute(
-            include_str!("modify/delete_file.sql"),
+            include_str!("modify/delete_file_from_index.sql"),
             &[
                 &station_num as &dyn rusqlite::types::ToSql,
                 &model.as_static_str() as &dyn rusqlite::types::ToSql,
                 &init_time as &dyn rusqlite::types::ToSql,
             ],
         )?;
+
+        Ok(())
+    }
+
+    /// Remove a site and all of its files from the archive.
+    pub fn remove_site(&self, station_num: StationNumber) -> Result<(), BufkitDataErr> {
+        let station_num: u32 = Into::<u32>::into(station_num);
+
+        let mut qstmt = self
+            .db_conn
+            .prepare(include_str!("modify/find_all_files_for_site.sql"))?;
+        let mut dstmt = self
+            .db_conn
+            .prepare(include_str!("modify/delete_file_by_name.sql"))?;
+
+        let file_deletion_results: Result<Vec<()>, _> = qstmt
+            .query_map(&[&station_num], |row| row.get(0))?
+            .map(|res: Result<String, rusqlite::Error>| res.map_err(BufkitDataErr::Database))
+            .map(|res| {
+                res.and_then(|fname| {
+                    std::fs::remove_file(self.data_root().join(&fname))
+                        .map_err(BufkitDataErr::IO)
+                        .map(|_| fname)
+                })
+            })
+            .map(|res| {
+                res.and_then(|fname| {
+                    dstmt
+                        .execute(&[fname])
+                        .map_err(BufkitDataErr::Database)
+                        .map(|_num_rows_affected| ())
+                })
+            })
+            .collect();
+        file_deletion_results?;
+
+        self.db_conn
+            .execute(include_str!("modify/delete_site.sql"), &[&station_num])?;
 
         Ok(())
     }
@@ -319,5 +357,52 @@ mod unit {
         assert!(!arch
             .file_exists(site, model, &init_time)
             .expect("Error checking db"));
+    }
+
+    #[test]
+    fn test_remove_site() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        let station_num = StationNumber::from(727730); // Station number for KMSO
+        let init_time_model_pairs = [
+            (NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0), Model::GFS),
+            (NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0), Model::NAM),
+            (NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0), Model::GFS),
+            (
+                NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0),
+                Model::GFS,
+            ),
+            (
+                NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0),
+                Model::NAM,
+            ),
+            (
+                NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0),
+                Model::GFS,
+            ),
+            (
+                NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0),
+                Model::NAM,
+            ),
+        ];
+
+        for &(init_time, model) in &init_time_model_pairs {
+            assert!(arch
+                .file_exists(station_num, model, &init_time)
+                .expect("Error checking db"));
+        }
+
+        arch.remove_site(station_num).expect("db error deleting.");
+
+        for &(init_time, model) in &init_time_model_pairs {
+            assert!(!arch
+                .file_exists(station_num, model, &init_time)
+                .expect("Error checking db"));
+        }
     }
 }
