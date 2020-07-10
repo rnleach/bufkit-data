@@ -25,6 +25,8 @@ pub enum BufkitDataErr {
     GeneralError(String),
 
     // My own errors from this crate
+    /// File not found in the index.
+    NotInIndex,
     /// The database structure is wrong.
     InvalidSchema,
     /// Invalid model name
@@ -55,6 +57,7 @@ impl Display for BufkitDataErr {
             StrumError(err) => write!(f, "error forwarded from strum crate: {}", err),
             GeneralError(msg) => write!(f, "general error forwarded: {}", msg),
 
+            NotInIndex => write!(f, "no match in the index"),
             InvalidSchema => write!(f, "invalid index format"),
             InvalidModelName(mdl_nm) => write!(f, "invalid model name: {}", mdl_nm),
             InvalidSiteId(site_id) => write!(f, "invalid site id: {}", site_id),

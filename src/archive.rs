@@ -45,7 +45,6 @@ mod unit {
     use super::*;
     use crate::{Model, StationNumber};
 
-    use chrono::NaiveDate;
     use tempdir::TempDir;
 
     // struct to hold temporary data for tests.
@@ -176,71 +175,25 @@ mod unit {
 
     /*
     #[test]
-    fn test_models_for_site() {
-        let TestArchive {
-            tmp: _tmp,
-            mut arch,
-        } = create_test_archive().expect("Failed to create test archive.");
-
-        fill_test_archive(&mut arch).expect("Error filling test archive.");
-
-        let kmso = arch.site_for_id("kmso").expect("Error retreiving MSO");
-
-        let models = arch.models(&kmso).expect("Error querying archive.");
-
-        assert!(models.contains(&Model::GFS));
-        assert!(models.contains(&Model::NAM));
-        assert!(!models.contains(&Model::NAM4KM));
-    }
-
-    #[test]
-    fn test_inventory() {
-        let TestArchive {
-            tmp: _tmp,
-            mut arch,
-        } = create_test_archive().expect("Failed to create test archive.");
-
-        fill_test_archive(&mut arch).expect("Error filling test archive.");
-
-        let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
-        let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
-        let missing = vec![(
-            NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0),
-            NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0),
-        )];
-
-        let expected = Inventory {
-            first,
-            last,
-            missing,
-            auto_download: false, // this is the default value
-        };
-
-        let kmso = arch.site_for_id("kmso").expect("Error retreiving MSO");
-
-        assert_eq!(arch.inventory(&kmso, Model::NAM).unwrap(), expected);
-    }
-
-    #[test]
     fn test_adding_duplicates() {
         let TestArchive {
             tmp: _tmp,
             mut arch,
         } = create_test_archive().expect("Failed to create test archive.");
 
-        fill_test_archive(&mut arch).expect("Error filling test archive.");
+        fill_test_archive(&mut arch);
 
+        let kmso = StationNumber::from(727730); // Station number for KMSO
         let start = NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0);
         let end = NaiveDate::from_ymd(2100, 1, 1).and_hms(0, 0, 0);
 
-        let kmso = arch.site_for_id("kmso").expect("Error retreiving MSO");
-
+        // TODO: Needs inventory to work. Use inventory to check.
         assert_eq!(
             arch.init_times_for_soundings_valid_between(start, end, &kmso, Model::GFS)
                 .expect("db error")
                 .iter()
                 .count(),
-            4
+            3
         );
         assert_eq!(
             arch.init_times_for_soundings_valid_between(start, end, &kmso, Model::NAM)
@@ -285,30 +238,5 @@ mod unit {
             assert!(raw_data == recovered_str);
         }
     }
-    */
-
-    /* Move to query module
-
-    #[test]
-    fn test_get_most_recent_file() {
-        let TestArchive {
-            tmp: _tmp,
-            mut arch,
-        } = create_test_archive().expect("Failed to create test archive.");
-
-        fill_test_archive(&mut arch).expect("Error filling test archive.");
-
-        let kmso = arch.site_for_id("kmso").unwrap();
-
-        let init_time = arch
-            .most_recent_init_time(&kmso, Model::GFS)
-            .expect("Error getting valid time.");
-
-        assert_eq!(init_time, NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0));
-
-        arch.most_recent_file(&kmso, Model::GFS)
-            .expect("Failed to retrieve sounding.");
-    }
-
     */
 }

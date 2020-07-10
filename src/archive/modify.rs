@@ -282,16 +282,6 @@ mod unit {
     use chrono::NaiveDate;
 
     #[test]
-    fn test_add() {
-        let TestArchive {
-            tmp: _tmp,
-            mut arch,
-        } = create_test_archive().expect("Failed to create test archive.");
-
-        fill_test_archive(&mut arch);
-    }
-
-    #[test]
     fn test_no_duplicate_sites() {
         let TestArchive { tmp: _tmp, arch } =
             create_test_archive().expect("Failed to create test archive.");
@@ -334,6 +324,16 @@ mod unit {
 
         assert_eq!(arch.site(STN).unwrap(), zootown);
         assert_ne!(arch.site(STN).unwrap(), test_sites[2]);
+    }
+
+    #[test]
+    fn test_add() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
     }
 
     #[test]
