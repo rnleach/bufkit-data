@@ -162,6 +162,30 @@ impl Archive {
         Ok(s)
     }
 
+    /// Retrieve the most recent station number used with this ID and model.
+    pub fn station_num_for_id(
+        &self,
+        id: &str,
+        model: Model,
+    ) -> Result<StationNumber, BufkitDataErr> {
+        let station_num: Result<u32, _> = self.db_conn.query_row(
+            include_str!("query/station_num_for_id_and_model.sql"),
+            &[
+                &id.to_uppercase() as &dyn rusqlite::types::ToSql,
+                &model.as_static_str(),
+            ],
+            |row| row.get(0),
+        );
+
+        let station_num = match station_num {
+            Ok(num) => StationNumber::from(num),
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Err(BufkitDataErr::NotInIndex),
+            Err(x) => return Err(BufkitDataErr::Database(x)),
+        };
+
+        Ok(station_num)
+    }
+
     /*
     /// Given a site_id string, get the corresponding Site object.
     pub fn site_for_id(&self, site_id: &str) -> Option<Site> {
@@ -426,6 +450,42 @@ mod unit {
         }
     }
 
+    #[test]
+    fn test_station_num_for_id() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        let kmso_station_num = StationNumber::from(727730); // Station number for KMSO
+
+        if let Ok(retrieved_station_num) = arch.station_num_for_id("kmso", Model::GFS) {
+            assert_eq!(retrieved_station_num, kmso_station_num);
+        } else {
+            panic!("Could not find station number!");
+        }
+
+        if let Ok(retrieved_station_num) = arch.station_num_for_id("KMSO", Model::GFS) {
+            assert_eq!(retrieved_station_num, kmso_station_num);
+        } else {
+            panic!("Could not find station number!");
+        }
+
+        if let Ok(retrieved_station_num) = arch.station_num_for_id("KmSo", Model::NAM) {
+            assert_eq!(retrieved_station_num, kmso_station_num);
+        } else {
+            panic!("Could not find station number!");
+        }
+
+        match arch.station_num_for_id("xyz", Model::GFS) {
+            Err(BufkitDataErr::NotInIndex) => {}
+            Ok(num) => panic!("Found station that does not exists! station_num = {}", num),
+            Err(err) => panic!("Other error: {}", err),
+        }
+    }
+
     /*
     #[test]
     fn test_inventory() {
@@ -465,11 +525,6 @@ mod unit {
     fn test_id_info() {
         // given a list of station numbers, return a list of (station_num, id, most recent date)
         // used for auto download sites? Inventory?
-        unimplemented!()
-    }
-
-    #[test]
-    fn test_station_num_for_id() {
         unimplemented!()
     }
 
