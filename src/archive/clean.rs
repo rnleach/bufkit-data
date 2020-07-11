@@ -1,5 +1,6 @@
 //! The cleaning method for Archive is complex, so it has its own module.
 
+/*
 use std::{collections::HashSet, convert::TryFrom, io::Read, str::FromStr};
 
 use crate::{
@@ -10,6 +11,7 @@ use crate::{
 };
 
 use super::Archive;
+*/
 
 /*
 // FIXME: Completely redo this.
