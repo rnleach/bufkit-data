@@ -173,6 +173,40 @@ mod unit {
         }
     }
 
+    #[test]
+    fn test_files_round_trip() {
+        let TestArchive { tmp: _tmp, arch } =
+            create_test_archive().expect("Failed to create test archive.");
+
+        let test_data = get_test_data();
+
+        for (site, model, raw_data) in test_data.iter() {
+            let init_time = sounding_bufkit::BufkitData::init(&raw_data, "x")
+                .unwrap()
+                .into_iter()
+                .next()
+                .unwrap()
+                .0
+                .valid_time()
+                .unwrap();
+
+            dbg!(init_time);
+            dbg!(&site);
+
+            let site = match arch.add(site, *model, raw_data) {
+                AddFileResult::Ok(site) | AddFileResult::New(site) => site,
+                x => panic!("Error adding site: {:?}", x),
+            };
+
+            dbg!(&site);
+
+            let recovered_str = arch
+                .retrieve(site, *model, init_time)
+                .expect("Failure to load");
+
+            assert!(raw_data == &recovered_str);
+        }
+    }
     /*
     #[test]
     fn test_adding_duplicates() {
@@ -204,39 +238,5 @@ mod unit {
         );
     }
 
-    #[test]
-    fn test_files_round_trip() {
-        let TestArchive { tmp: _tmp, arch } =
-            create_test_archive().expect("Failed to create test archive.");
-
-        let test_data = get_test_data().expect("Error loading test data.");
-
-        for (site, model, raw_data) in test_data {
-            let init_time = sounding_bufkit::BufkitData::init(&raw_data, "x")
-                .unwrap()
-                .into_iter()
-                .next()
-                .unwrap()
-                .0
-                .valid_time()
-                .unwrap();
-
-            dbg!(init_time);
-            dbg!(&site);
-
-            let site = match arch.add(&site, model, &raw_data) {
-                AddFileResult::Ok(site) | AddFileResult::New(site) => site,
-                x => panic!("Error adding site: {:?}", x),
-            };
-
-            dbg!(&site);
-
-            let recovered_str = arch
-                .retrieve(&site, model, init_time)
-                .expect("Failure to load");
-
-            assert!(raw_data == recovered_str);
-        }
-    }
     */
 }
