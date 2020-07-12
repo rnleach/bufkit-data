@@ -1,11 +1,9 @@
-use chrono::NaiveDateTime;
 use metfor::Quantity;
-use std::{convert::TryFrom, io::Write};
+use std::io::Write;
 
 use super::Archive;
 
 use crate::{
-    coords::Coords,
     errors::BufkitDataErr,
     models::Model,
     site::{SiteInfo, StationNumber},
@@ -46,7 +44,6 @@ impl Archive {
                 return AddFileResult::Error(BufkitDataErr::LogicError("ids do not match."));
             }
         }
-        let site_id = Some(site_id_hint);
 
         if self.site(station_num).is_none() {
             let new_site = SiteInfo {
@@ -59,7 +56,8 @@ impl Archive {
             }
         }
 
-        let file_name = self.compressed_file_name(station_num, model, init_time);
+        let file_name = self.compressed_file_name(&site_id_hint, model, init_time);
+        let site_id = Some(site_id_hint);
 
         match std::fs::File::create(self.data_root().join(&file_name))
             .map_err(BufkitDataErr::IO)
@@ -202,62 +200,9 @@ impl Archive {
         Ok(())
     }
 
-    fn parse_site_info(
-        text: &str,
-    ) -> Result<
-        (
-            StationNumber,
-            Option<String>,
-            chrono::NaiveDateTime,
-            chrono::NaiveDateTime,
-            Coords,
-            metfor::Meters,
-        ),
-        BufkitDataErr,
-    > {
-        let bdata = sounding_bufkit::BufkitData::init(text, "")?;
-        let mut iter = bdata.into_iter();
-
-        let first = iter.next().ok_or(BufkitDataErr::NotEnoughData)?.0;
-        let last = iter.last().ok_or(BufkitDataErr::NotEnoughData)?.0;
-
-        let init_time: NaiveDateTime = first.valid_time().ok_or(BufkitDataErr::MissingValidTime)?;
-        let end_time: NaiveDateTime = last.valid_time().ok_or(BufkitDataErr::MissingValidTime)?;
-        let coords: Coords = first
-            .station_info()
-            .location()
-            .map(Coords::from)
-            .ok_or(BufkitDataErr::MissingStationData)?;
-
-        let elevation = match first.station_info().elevation().into_option() {
-            Some(elev) => elev,
-            None => return Err(BufkitDataErr::MissingStationData),
-        };
-
-        let station_num: i32 = first
-            .station_info()
-            .station_num()
-            .ok_or(BufkitDataErr::MissingStationData)?;
-        let station_num: StationNumber = u32::try_from(station_num)
-            .map_err(|_| BufkitDataErr::GeneralError("negative station number?".to_owned()))
-            .map(StationNumber::from)?;
-
-        Ok((
-            station_num,
-            first
-                .station_info()
-                .station_id()
-                .map(|id| id.to_uppercase()),
-            init_time,
-            end_time,
-            coords,
-            elevation,
-        ))
-    }
-
     fn compressed_file_name(
         &self,
-        station_num: StationNumber,
+        station_id: &str,
         model: Model,
         init_time: chrono::NaiveDateTime,
     ) -> String {
@@ -267,7 +212,7 @@ impl Archive {
             "{}_{}_{}.buf.gz",
             file_string,
             model.as_static_str(),
-            station_num,
+            station_id,
         )
     }
 }

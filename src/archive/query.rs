@@ -203,16 +203,14 @@ impl Archive {
 
         let root = self.data_root().clone();
         Ok(file_names.into_iter().filter_map(move |fname| {
-            std::fs::File::open(root.join(fname))
-                .ok()
-                .and_then(|f| {
-                    let mut decoder = flate2::read::GzDecoder::new(f);
-                    let mut s = String::new();
-                    match decoder.read_to_string(&mut s) {
-                        Ok(_) => Some(s),
-                        Err(_) => None,
-                    }
-                })
+            std::fs::File::open(root.join(fname)).ok().and_then(|f| {
+                let mut decoder = flate2::read::GzDecoder::new(f);
+                let mut s = String::new();
+                match decoder.read_to_string(&mut s) {
+                    Ok(_) => Some(s),
+                    Err(_) => None,
+                }
+            })
         }))
     }
 

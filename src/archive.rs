@@ -1,8 +1,13 @@
 //! An archive of bufkit soundings.
 
-#[cfg(test)]
-use crate::{BufkitDataErr, Model, SiteInfo, StateProv, StationNumber};
+use crate::{coords::Coords, BufkitDataErr, StationNumber};
 use std::path::PathBuf;
+
+use chrono::NaiveDateTime;
+use std::convert::TryFrom;
+
+#[cfg(test)]
+use crate::models::Model;
 
 /// The archive.
 #[derive(Debug)]
@@ -18,6 +23,59 @@ mod query;
 mod root;
 
 impl Archive {
+    fn parse_site_info(
+        text: &str,
+    ) -> Result<
+        (
+            StationNumber,
+            Option<String>,
+            chrono::NaiveDateTime,
+            chrono::NaiveDateTime,
+            Coords,
+            metfor::Meters,
+        ),
+        BufkitDataErr,
+    > {
+        let bdata = sounding_bufkit::BufkitData::init(text, "")?;
+        let mut iter = bdata.into_iter();
+
+        let first = iter.next().ok_or(BufkitDataErr::NotEnoughData)?.0;
+        let last = iter.last().ok_or(BufkitDataErr::NotEnoughData)?.0;
+
+        let init_time: NaiveDateTime = first.valid_time().ok_or(BufkitDataErr::MissingValidTime)?;
+        let end_time: NaiveDateTime = last.valid_time().ok_or(BufkitDataErr::MissingValidTime)?;
+        let coords: Coords = first
+            .station_info()
+            .location()
+            .map(Coords::from)
+            .ok_or(BufkitDataErr::MissingStationData)?;
+
+        let elevation = match first.station_info().elevation().into_option() {
+            Some(elev) => elev,
+            None => return Err(BufkitDataErr::MissingStationData),
+        };
+
+        let station_num: i32 = first
+            .station_info()
+            .station_num()
+            .ok_or(BufkitDataErr::MissingStationData)?;
+        let station_num: StationNumber = u32::try_from(station_num)
+            .map_err(|_| BufkitDataErr::GeneralError("negative station number?".to_owned()))
+            .map(StationNumber::from)?;
+
+        Ok((
+            station_num,
+            first
+                .station_info()
+                .station_id()
+                .map(|id| id.to_uppercase()),
+            init_time,
+            end_time,
+            coords,
+            elevation,
+        ))
+    }
+
     /// Check to see if a file is present in the archive and it is retrieveable.
     #[cfg(test)]
     fn file_exists(
@@ -43,7 +101,7 @@ impl Archive {
 #[cfg(test)]
 mod unit {
     use super::*;
-    use crate::{Model, StationNumber};
+    use crate::{Model, SiteInfo, StateProv, StationNumber};
 
     use tempdir::TempDir;
 
