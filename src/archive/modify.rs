@@ -48,7 +48,7 @@ impl Archive {
         }
         let site_id = Some(site_id_hint);
 
-        if let None = self.site(station_num) {
+        if self.site(station_num).is_none() {
             let new_site = SiteInfo {
                 station_num,
                 ..SiteInfo::default()
