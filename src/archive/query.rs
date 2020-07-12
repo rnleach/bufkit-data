@@ -160,6 +160,62 @@ impl Archive {
         Ok(s)
     }
 
+    /// Retrieve all the soundings with any data valid between the start and end times.
+    pub fn retrieve_all_valid_in(
+        &self,
+        station_num: StationNumber,
+        model: Model,
+        start: chrono::NaiveDateTime,
+        end: chrono::NaiveDateTime,
+    ) -> Result<impl Iterator<Item = String>, BufkitDataErr> {
+        let station_num: u32 = Into::<u32>::into(station_num);
+
+        let mut stmt = self.db_conn.prepare(
+            "
+                    SELECT file_name 
+                    FROM files 
+                    WHERE station_num = ?1 AND model = ?2 AND 
+                        (
+                            (init_time <= ?3 AND end_time >= ?4) OR 
+                            (init_time >= ?3 AND init_time < ?4) OR 
+                            (end_time > ?3 AND end_time <= ?4)
+                        )
+                    ORDER BY init_time ASC 
+                ",
+        )?;
+
+        let file_names: Vec<String> = stmt
+            .query_map(
+                &[
+                    &station_num as &dyn rusqlite::types::ToSql,
+                    &model.as_static_str() as &dyn rusqlite::types::ToSql,
+                    &start as &dyn rusqlite::types::ToSql,
+                    &end as &dyn rusqlite::types::ToSql,
+                ],
+                |row| row.get(0),
+            )?
+            .filter_map(|res| res.ok())
+            .collect();
+
+        if file_names.is_empty() {
+            return Err(BufkitDataErr::NotInIndex);
+        }
+
+        let root = self.data_root().clone();
+        Ok(file_names.into_iter().filter_map(move |fname| {
+            std::fs::File::open(root.join(fname))
+                .ok()
+                .and_then(|f| {
+                    let mut decoder = flate2::read::GzDecoder::new(f);
+                    let mut s = String::new();
+                    match decoder.read_to_string(&mut s) {
+                        Ok(_) => Some(s),
+                        Err(_) => None,
+                    }
+                })
+        }))
+    }
+
     /// Retrieve the most recent station number used with this ID and model.
     pub fn station_num_for_id(
         &self,
@@ -282,28 +338,6 @@ impl Archive {
 
         Ok((start, end))
     }
-
-    /*
-
-    /// Retrieve all the soundings with data valid between the start and end times.
-    pub fn retrieve_all_valid_in(
-        &self,
-        start: chrono::NaiveDateTime,
-        end: chrono::NaiveDateTime,
-        site: &Site,
-        model: Model,
-    ) -> Result<Vec<String>, BufkitDataErr> {
-        let init_times = self.init_times_for_soundings_valid_between(start, end, site, model)?;
-
-        let string_data: Result<Vec<String>, _> = init_times
-            .into_iter()
-            .map(|init_t| self.retrieve(site, model, init_t))
-            .collect();
-
-        string_data
-    }
-
-    */
 }
 
 #[cfg(test)]
@@ -527,5 +561,72 @@ mod unit {
         assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 4, 2).and_hms(0, 0, 0)));
         assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 4, 2).and_hms(6, 0, 0)));
         assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 4, 2).and_hms(12, 0, 0)));
+    }
+
+    #[test]
+    fn test_retrieve_all_valid_in() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        let kmso = StationNumber::from(727730); // Station number for KMSO
+        let start = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let end = NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0);
+        assert_eq!(
+            arch.retrieve_all_valid_in(kmso, Model::GFS, start, end)
+                .unwrap()
+                .into_iter()
+                .count(),
+            1
+        );
+
+        let end = NaiveDate::from_ymd(2017, 4, 2).and_hms(0, 0, 0);
+        assert_eq!(
+            arch.retrieve_all_valid_in(kmso, Model::GFS, start, end)
+                .unwrap()
+                .into_iter()
+                .count(),
+            3
+        );
+
+        let start = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
+        assert_eq!(
+            arch.retrieve_all_valid_in(kmso, Model::GFS, start, end)
+                .unwrap()
+                .into_iter()
+                .count(),
+            3
+        );
+
+        let start = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let end = NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0);
+        assert_eq!(
+            arch.retrieve_all_valid_in(kmso, Model::NAM, start, end)
+                .unwrap()
+                .into_iter()
+                .count(),
+            1
+        );
+
+        let end = NaiveDate::from_ymd(2017, 4, 2).and_hms(0, 0, 0);
+        assert_eq!(
+            arch.retrieve_all_valid_in(kmso, Model::NAM, start, end)
+                .unwrap()
+                .into_iter()
+                .count(),
+            3
+        );
+
+        let start = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
+        assert_eq!(
+            arch.retrieve_all_valid_in(kmso, Model::NAM, start, end)
+                .unwrap()
+                .into_iter()
+                .count(),
+            3
+        );
     }
 }

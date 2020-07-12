@@ -62,17 +62,12 @@ mod unit {
     }
 
     // Get some simplified data for testing.
-    pub(super) fn get_test_data() -> [(String, Model, String); 8] {
+    pub(super) fn get_test_data() -> [(String, Model, String); 7] {
         [
             (
                 "KMSO".to_owned(),
                 Model::NAM,
                 include_str!("../example_data/2017040100Z_nam_kmso.buf").to_owned(),
-            ),
-            (
-                "KMSO".to_owned(),
-                Model::GFS,
-                include_str!("../example_data/2017040106Z_gfs3_kmso.buf").to_owned(),
             ),
             (
                 "KMSO".to_owned(),
