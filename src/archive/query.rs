@@ -238,6 +238,35 @@ impl Archive {
         Ok(station_num)
     }
 
+    /// Retrieve a list of site ids use with the station number.
+    pub fn ids(
+        &self,
+        station_num: StationNumber,
+        model: Model,
+    ) -> Result<Vec<String>, BufkitDataErr> {
+        let station_num: u32 = Into::<u32>::into(station_num);
+
+        let mut stmt = self.db_conn.prepare(
+            "
+                SELECT DISTINCT id 
+                FROM files
+                WHERE station_num = ?1 AND model = ?2
+            ",
+        )?;
+
+        let sites: Result<Vec<String>, _> = stmt
+            .query_map(
+                &[
+                    &station_num as &dyn rusqlite::types::ToSql,
+                    &model.as_static_str() as &dyn rusqlite::types::ToSql,
+                ],
+                |row| row.get(0),
+            )?
+            .collect();
+
+        sites.map_err(BufkitDataErr::Database)
+    }
+
     /// Get an inventory of soundings for a site & model.
     pub fn inventory(
         &self,
@@ -494,6 +523,40 @@ mod unit {
             Ok(num) => panic!("Found station that does not exists! station_num = {}", num),
             Err(err) => panic!("Other error: {}", err),
         }
+    }
+
+    #[test]
+    fn test_ids() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        let kmso_station_num = StationNumber::from(727730); // Station number for KMSO
+        let ids = arch
+            .ids(kmso_station_num, Model::GFS)
+            .expect("Database error.");
+        assert!(ids.contains(&"KMSO".to_owned()));
+        assert_eq!(ids.len(), 1);
+
+        let ids = arch
+            .ids(kmso_station_num, Model::NAM)
+            .expect("Database error.");
+        assert!(ids.contains(&"KMSO".to_owned()));
+        assert_eq!(ids.len(), 1);
+
+        let ids = arch
+            .ids(kmso_station_num, Model::NAM4KM)
+            .expect("Database error.");
+        assert_eq!(ids.len(), 0);
+
+        let fake_station_num = StationNumber::from(5);
+        let ids = arch
+            .ids(fake_station_num, Model::GFS)
+            .expect("Database error.");
+        assert_eq!(ids.len(), 0);
     }
 
     #[test]
