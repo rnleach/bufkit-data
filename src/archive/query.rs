@@ -1,4 +1,5 @@
-use std::{io::Read, str::FromStr};
+use chrono::NaiveDateTime;
+use std::{collections::HashSet, io::Read, iter::FromIterator, str::FromStr};
 
 use super::Archive;
 
@@ -183,28 +184,106 @@ impl Archive {
         Ok(station_num)
     }
 
-    /*
-    /// Given a site_id string, get the corresponding Site object.
-    pub fn site_for_id(&self, site_id: &str) -> Option<Site> {
-        self.db_conn
-            .query_row_and_then(
-                "
-                    SELECT
-                         sites.station_num,
-                         site_ids.id,
-                         name,
-                         state,
-                         notes,
-                         auto_download,
-                         tz_offset_sec
-                    FROM site_ids JOIN sites ON site_ids.station_num = sites.station_num
-                    WHERE site_ids.id = ?1
-                ",
-                &[&site_id.to_uppercase()],
-                Self::parse_row_to_site,
-            )
-            .ok()
+    /// Get an inventory of soundings for a site & model.
+    pub fn inventory(
+        &self,
+        station_num: StationNumber,
+        model: Model,
+    ) -> Result<Vec<NaiveDateTime>, BufkitDataErr> {
+        let station_num: u32 = Into::<u32>::into(station_num);
+
+        let mut stmt = self.db_conn.prepare(
+            "
+                SELECT init_time
+                FROM files
+                WHERE station_num = ?1 AND model = ?2
+                ORDER BY init_time ASC
+            ",
+        )?;
+
+        let inv: Result<Vec<NaiveDateTime>, _> = stmt
+            .query_map(
+                &[
+                    &station_num as &dyn rusqlite::types::ToSql,
+                    &model.as_static_str() as &dyn rusqlite::types::ToSql,
+                ],
+                |row| row.get(0),
+            )?
+            .collect();
+
+        inv.map_err(BufkitDataErr::Database)
     }
+
+    /// Get list of missing init times.
+    ///
+    /// If time_range is `None`, this will find the first and last entries and then look for any
+    /// gaps. If time_range is specified, then the end times are inclusive.
+    pub fn missing_inventory(
+        &self,
+        station_num: StationNumber,
+        model: Model,
+        time_range: Option<(NaiveDateTime, NaiveDateTime)>,
+    ) -> Result<Vec<NaiveDateTime>, BufkitDataErr> {
+        let (start, end) = if let Some((start, end)) = time_range {
+            (start, end)
+        } else {
+            self.first_and_last_dates(station_num, model)?
+        };
+
+        let inv = self.inventory(station_num, model)?;
+        let inv: HashSet<NaiveDateTime> = HashSet::from_iter(inv.into_iter());
+
+        let mut to_ret = vec![];
+        for curr_time in model.all_runs(&start, &end) {
+            if !inv.contains(&curr_time) {
+                to_ret.push(curr_time);
+            }
+        }
+
+        Ok(to_ret)
+    }
+
+    fn first_and_last_dates(
+        &self,
+        station_num: StationNumber,
+        model: Model,
+    ) -> Result<(NaiveDateTime, NaiveDateTime), BufkitDataErr> {
+        let station_num: u32 = Into::<u32>::into(station_num);
+
+        let start = self.db_conn.query_row(
+            "
+                    SELECT init_time
+                    FROM files
+                    WHERE station_num = ?1 AND model = ?2
+                    ORDER BY init_time ASC
+                    LIMIT 1
+                ",
+            &[
+                &station_num as &dyn rusqlite::types::ToSql,
+                &model.as_static_str() as &dyn rusqlite::types::ToSql,
+            ],
+            |row| row.get(0),
+        )?;
+
+        let end = self.db_conn.query_row(
+            "
+                    SELECT init_time
+                    FROM files
+                    WHERE station_num = ?1 AND model = ?2
+                    ORDER BY init_time DESC
+                    LIMIT 1
+                ",
+            &[
+                &station_num as &dyn rusqlite::types::ToSql,
+                &model.as_static_str() as &dyn rusqlite::types::ToSql,
+            ],
+            |row| row.get(0),
+        )?;
+
+        Ok((start, end))
+    }
+
+    /*
 
     /// Retrieve all the soundings with data valid between the start and end times.
     pub fn retrieve_all_valid_in(
@@ -222,12 +301,6 @@ impl Archive {
             .collect();
 
         string_data
-    }
-
-    /// Get an inventory of soundings for a site & model.
-    pub fn inventory(&self, site: &Site, model: Model) -> Result<Inventory, BufkitDataErr> {
-        let init_times = self.init_times(site, model)?;
-        Inventory::new(init_times, model, site)
     }
 
     */
@@ -391,7 +464,6 @@ mod unit {
         }
     }
 
-    /*
     #[test]
     fn test_inventory() {
         let TestArchive {
@@ -399,39 +471,61 @@ mod unit {
             mut arch,
         } = create_test_archive().expect("Failed to create test archive.");
 
-        fill_test_archive(&mut arch).expect("Error filling test archive.");
+        fill_test_archive(&mut arch);
 
+        let kmso = StationNumber::from(727730); // Station number for KMSO
         let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let second = NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0);
         let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
-        let missing = vec![(
-            NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0),
-            NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0),
-        )];
+        let missing = NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0);
 
-        let expected = Inventory {
-            first,
-            last,
-            missing,
-            auto_download: false, // this is the default value
-        };
-
-        let kmso = arch.site_for_id("kmso").expect("Error retreiving MSO");
-
-        assert_eq!(arch.inventory(&kmso, Model::NAM).unwrap(), expected);
+        let inv = arch.inventory(kmso, Model::NAM).expect("Data base error?");
+        assert!(inv.contains(&first));
+        assert!(inv.contains(&second));
+        assert!(inv.contains(&last));
+        assert!(!inv.contains(&missing));
     }
 
     #[test]
-    fn test_auto_download_sites() {
-        // list of strings with 4 letter ids used for downloading
-        unimplemented!()
-    }
+    fn test_missing_inventory() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
 
-    #[test]
-    fn test_id_info() {
-        // given a list of station numbers, return a list of (station_num, id, most recent date)
-        // used for auto download sites? Inventory?
-        unimplemented!()
-    }
+        fill_test_archive(&mut arch);
 
-    */
+        let kmso = StationNumber::from(727730); // Station number for KMSO
+        let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let second = NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0);
+        let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
+        let missing = NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0);
+
+        let missing_times = arch
+            .missing_inventory(kmso, Model::NAM, None)
+            .expect("Data base error?");
+        assert!(!missing_times.contains(&first));
+        assert!(!missing_times.contains(&second));
+        assert!(!missing_times.contains(&last));
+        assert!(missing_times.contains(&missing));
+
+        let larger_range = (
+            NaiveDate::from_ymd(2017, 3, 31).and_hms(0, 0, 0),
+            NaiveDate::from_ymd(2017, 4, 2).and_hms(12, 0, 0),
+        );
+        let missing_times = arch
+            .missing_inventory(kmso, Model::NAM, Some(larger_range))
+            .expect("Data base error?");
+        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 3, 31).and_hms(0, 0, 0)));
+        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 3, 31).and_hms(6, 0, 0)));
+        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 3, 31).and_hms(12, 0, 0)));
+        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 3, 31).and_hms(18, 0, 0)));
+        assert!(!missing_times.contains(&first));
+        assert!(!missing_times.contains(&second));
+        assert!(!missing_times.contains(&last));
+        assert!(missing_times.contains(&missing));
+        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 4, 2).and_hms(0, 0, 0)));
+        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 4, 2).and_hms(6, 0, 0)));
+        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 4, 2).and_hms(12, 0, 0)));
+    }
 }
