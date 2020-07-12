@@ -29,15 +29,12 @@ impl Archive {
         let file_system_vals = self.get_all_files_in_data_dir(&arch)?;
 
         println!("Comparing sets for files in index but not in the archive.");
-        let files_in_index_but_not_on_file_system = index_vals.difference(&file_system_vals);
-        self.remove_missing_files_from_index(
-            &arch,
-            &mut files_in_index_but_not_on_file_system.into_iter(),
-        )?;
+        let mut files_in_index_but_not_on_file_system = index_vals.difference(&file_system_vals);
+        self.remove_missing_files_from_index(&arch, &mut files_in_index_but_not_on_file_system)?;
 
         println!("Comparing sets for files in archive but not in the index.");
-        let files_not_in_index = file_system_vals.difference(&index_vals);
-        self.handle_files_in_archive_but_not_index(&arch, &mut files_not_in_index.into_iter())?;
+        let mut files_not_in_index = file_system_vals.difference(&index_vals);
+        self.handle_files_in_archive_but_not_index(&arch, &mut files_not_in_index)?;
 
         println!("Compressing index.");
         arch.db_conn.execute("VACUUM", rusqlite::NO_PARAMS)?;

@@ -201,7 +201,7 @@ impl Archive {
             return Err(BufkitDataErr::NotInIndex);
         }
 
-        let root = self.data_root().clone();
+        let root = self.data_root();
         Ok(file_names.into_iter().filter_map(move |fname| {
             std::fs::File::open(root.join(fname)).ok().and_then(|f| {
                 let mut decoder = flate2::read::GzDecoder::new(f);
