@@ -107,7 +107,6 @@ impl Archive {
                     as &dyn rusqlite::types::ToSql,
                 &site.notes,
                 &site.time_zone.map(|tz| tz.local_minus_utc()),
-                &site.auto_download,
             ],
         )?;
 
@@ -125,7 +124,6 @@ impl Archive {
                         as &dyn rusqlite::types::ToSql,
                     &site.name,
                     &site.notes,
-                    &site.auto_download,
                     &site.time_zone.map(|tz| tz.local_minus_utc()),
                 ],
             )
@@ -315,8 +313,7 @@ mod unit {
             station_num: StationNumber::from(STN),
             name: Some("Zootown".to_owned()),
             notes: Some("Mountains, not coast.".to_owned()),
-            state: None,
-            auto_download: true,
+            state: Some(crate::StateProv::MT),
             time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
         };
 

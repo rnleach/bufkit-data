@@ -19,9 +19,6 @@ pub struct SiteInfo {
     /// The state or providence where this location is located. This allows querying sites by what
     /// state or providence they are in.
     pub state: Option<StateProv>,
-    /// For programs that download files, this allows marking some sites for automatic download
-    /// without further specification.
-    pub auto_download: bool,
     /// Time zone information
     pub time_zone: Option<FixedOffset>,
 }
@@ -41,12 +38,11 @@ impl Display for SiteInfo {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         writeln!(
             formatter,
-            "Site: station_num - {:6} | name - {:20} | state - {:2} | notes - {} | download - {}",
+            "Site: station_num - {:6} | name - {:20} | state - {:2} | notes - {}",
             self.station_num,
             self.name.as_deref().unwrap_or("None"),
             self.state.map(|s| s.as_static_str()).unwrap_or("None"),
             self.notes.as_deref().unwrap_or("None"),
-            self.auto_download,
         )
     }
 }
@@ -58,7 +54,6 @@ impl Default for SiteInfo {
             name: None,
             notes: None,
             state: None,
-            auto_download: false,
             time_zone: None,
         }
     }
@@ -78,7 +73,6 @@ mod unit {
             name: Some("tv station".to_owned()),
             state: Some(StateProv::VI),
             notes: Some("".to_owned()),
-            auto_download: false,
             time_zone: Some(FixedOffset::west(7 * 3600)),
         };
 
@@ -87,7 +81,6 @@ mod unit {
             name: Some("tv station".to_owned()),
             state: None,
             notes: None,
-            auto_download: true,
             time_zone: None,
         };
 

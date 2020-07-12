@@ -29,14 +29,13 @@ impl Archive {
 
         let name: Option<String> = row.get(1)?;
         let notes: Option<String> = row.get(3)?;
-        let auto_download: bool = row.get(4)?;
         let state: Option<StateProv> = row
             .get::<_, String>(2)
             .ok()
             .and_then(|a_string| StateProv::from_str(&a_string).ok());
 
         let time_zone: Option<chrono::FixedOffset> =
-            row.get::<_, i32>(5).ok().map(|offset: i32| {
+            row.get::<_, i32>(4).ok().map(|offset: i32| {
                 if offset < 0 {
                     chrono::FixedOffset::west(offset.abs())
                 } else {
@@ -49,7 +48,6 @@ impl Archive {
             name,
             notes,
             state,
-            auto_download,
             time_zone,
         })
     }
@@ -64,7 +62,6 @@ impl Archive {
                          name,
                          state,
                          notes,
-                         auto_download,
                          tz_offset_sec
                     FROM sites 
                     WHERE station_num = ?1
@@ -260,7 +257,6 @@ mod unit {
         assert_eq!(si.name, Some("Chicago/O'Hare".to_owned()));
         assert_eq!(si.notes, Some("Major air travel hub.".to_owned()));
         assert_eq!(si.state, Some(StateProv::IL));
-        assert_eq!(si.auto_download, false);
         assert_eq!(si.time_zone, None);
 
         let si = arch
@@ -272,7 +268,6 @@ mod unit {
             Some("A coastal city with coffe and rain".to_owned())
         );
         assert_eq!(si.state, Some(StateProv::WA));
-        assert_eq!(si.auto_download, true);
         assert_eq!(si.time_zone, Some(chrono::FixedOffset::west(8 * 3600)));
 
         let si = arch
@@ -281,7 +276,6 @@ mod unit {
         assert_eq!(si.name, Some("Missoula".to_owned()));
         assert_eq!(si.notes, Some("In a valley.".to_owned()));
         assert_eq!(si.state, None);
-        assert_eq!(si.auto_download, true);
         assert_eq!(si.time_zone, Some(chrono::FixedOffset::west(7 * 3600)));
 
         assert!(arch.site(StationNumber::from(0)).is_none());

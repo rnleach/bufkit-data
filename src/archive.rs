@@ -129,7 +129,6 @@ mod unit {
                 name: Some("Chicago/O'Hare".to_owned()),
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
-                auto_download: false,
                 time_zone: None,
             },
             SiteInfo {
@@ -137,7 +136,6 @@ mod unit {
                 name: Some("Seattle".to_owned()),
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
-                auto_download: true,
                 time_zone: Some(chrono::FixedOffset::west(8 * 3600)),
             },
             SiteInfo {
@@ -145,7 +143,6 @@ mod unit {
                 name: Some("Missoula".to_owned()),
                 notes: Some("In a valley.".to_owned()),
                 state: None,
-                auto_download: true,
                 time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
             },
         ]
