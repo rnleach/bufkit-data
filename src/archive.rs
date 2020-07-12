@@ -204,7 +204,7 @@ mod unit {
             assert!(raw_data == &recovered_str);
         }
     }
-    /*
+
     #[test]
     fn test_adding_duplicates() {
         let TestArchive {
@@ -212,28 +212,41 @@ mod unit {
             mut arch,
         } = create_test_archive().expect("Failed to create test archive.");
 
+        let kmso = StationNumber::from(727730); // Station number for KMSO
+
         fill_test_archive(&mut arch);
 
-        let kmso = StationNumber::from(727730); // Station number for KMSO
-        let start = NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0);
-        let end = NaiveDate::from_ymd(2100, 1, 1).and_hms(0, 0, 0);
-
-        // TODO: Needs inventory to work. Use inventory to check.
         assert_eq!(
-            arch.init_times_for_soundings_valid_between(start, end, &kmso, Model::GFS)
+            arch.inventory(kmso, Model::GFS)
                 .expect("db error")
                 .iter()
                 .count(),
             3
         );
         assert_eq!(
-            arch.init_times_for_soundings_valid_between(start, end, &kmso, Model::NAM)
+            arch.inventory(kmso, Model::NAM)
+                .expect("db error")
+                .iter()
+                .count(),
+            3
+        );
+
+        // Do it again and make sure the numbers are the same.
+        fill_test_archive(&mut arch);
+
+        assert_eq!(
+            arch.inventory(kmso, Model::GFS)
+                .expect("db error")
+                .iter()
+                .count(),
+            3
+        );
+        assert_eq!(
+            arch.inventory(kmso, Model::NAM)
                 .expect("db error")
                 .iter()
                 .count(),
             3
         );
     }
-
-    */
 }
