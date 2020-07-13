@@ -19,6 +19,7 @@ CREATE TABLE sites (
     state         TEXT DEFAULT NULL,     -- State/Providence code
     notes         TEXT DEFAULT NULL,     -- Human readable notes
     tz_offset_sec INT  DEFAULT 0,        -- Offset from UTC in seconds
+    auto_download INT  DEFAULT 0,        -- Download this site automatically
     PRIMARY KEY (station_num)
 );
 

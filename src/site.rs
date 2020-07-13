@@ -21,6 +21,8 @@ pub struct SiteInfo {
     pub state: Option<StateProv>,
     /// Time zone information
     pub time_zone: Option<FixedOffset>,
+    /// Mark this site for automatic updates/downloads
+    pub auto_download: bool,
 }
 
 impl SiteInfo {
@@ -55,6 +57,7 @@ impl Default for SiteInfo {
             notes: None,
             state: None,
             time_zone: None,
+            auto_download: false,
         }
     }
 }
@@ -74,6 +77,7 @@ mod unit {
             state: Some(StateProv::VI),
             notes: Some("".to_owned()),
             time_zone: Some(FixedOffset::west(7 * 3600)),
+            auto_download: false,
         };
 
         let incomplete_site = SiteInfo {
@@ -82,6 +86,7 @@ mod unit {
             state: None,
             notes: None,
             time_zone: None,
+            auto_download: false,
         };
 
         assert!(!complete_site.incomplete());

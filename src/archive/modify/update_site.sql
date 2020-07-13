@@ -3,6 +3,7 @@ SET (
     state,
     name,
     notes,
-    tz_offset_sec
-) = (?2, ?3, ?4, ?5)
+    tz_offset_sec,
+    auto_download
+) = (?2, ?3, ?4, ?5, ?6)
 WHERE station_num = ?1

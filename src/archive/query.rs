@@ -44,12 +44,15 @@ impl Archive {
                 }
             });
 
+        let auto_download: bool = row.get(5)?;
+
         Ok(SiteInfo {
             station_num,
             name,
             notes,
             state,
             time_zone,
+            auto_download,
         })
     }
 
@@ -63,7 +66,8 @@ impl Archive {
                          name,
                          state,
                          notes,
-                         tz_offset_sec
+                         tz_offset_sec,
+                         auto_download
                     FROM sites 
                     WHERE station_num = ?1
                 ",
