@@ -267,6 +267,41 @@ impl Archive {
         sites.map_err(BufkitDataErr::Database)
     }
 
+    /// Retrieve the most recently used ID with a site.
+    pub fn most_recent_id(
+        &self,
+        station_num: StationNumber,
+        model: Model,
+    ) -> Result<Option<String>, BufkitDataErr> {
+        let station_num_raw: u32 = Into::<u32>::into(station_num);
+
+        let mut stmt = self.db_conn.prepare(
+            "
+                SELECT id, init_time 
+                FROM files
+                WHERE station_num = ?1 AND model = ?2
+                ORDER BY init_time DESC
+            ",
+        )?;
+
+        let most_recent_site: String = stmt
+            .query_row(
+                &[
+                    &station_num_raw as &dyn rusqlite::types::ToSql,
+                    &model.as_static_str() as &dyn rusqlite::types::ToSql,
+                ],
+                |row| row.get(0),
+            )?;
+
+        let most_recent_station_num = self.station_num_for_id(&most_recent_site, model)?;
+
+        if most_recent_station_num == station_num {
+            Ok(Some(most_recent_site))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Get an inventory of soundings for a site & model.
     pub fn inventory(
         &self,
@@ -557,6 +592,27 @@ mod unit {
             .ids(fake_station_num, Model::GFS)
             .expect("Database error.");
         assert_eq!(ids.len(), 0);
+    }
+
+    #[test]
+    fn test_most_recent_id() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        let kmso_station_num = StationNumber::from(727730); // Station number for KMSO
+        let id = arch
+            .most_recent_id(kmso_station_num, Model::GFS)
+            .expect("Database error.");
+        assert_eq!(id.unwrap(), "KMSO".to_owned());
+
+        let id = arch
+            .most_recent_id(kmso_station_num, Model::NAM)
+            .expect("Database error.");
+        assert_eq!(id.unwrap(), "KMSO".to_owned());
     }
 
     #[test]
