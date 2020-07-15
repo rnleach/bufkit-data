@@ -218,6 +218,26 @@ impl Archive {
         }))
     }
 
+    /// Check to see if a file is present in the archive and it is retrieveable.
+    pub fn file_exists(
+        &self,
+        site: StationNumber,
+        model: Model,
+        init_time: NaiveDateTime,
+    ) -> Result<bool, BufkitDataErr> {
+        let num_records: i32 = self.db_conn.query_row(
+            "SELECT COUNT(*) FROM files WHERE station_num = ?1 AND model = ?2 AND init_time = ?3",
+            &[
+                &Into::<i64>::into(site) as &dyn rusqlite::types::ToSql,
+                &model.as_static_str() as &dyn rusqlite::types::ToSql,
+                &init_time as &dyn rusqlite::types::ToSql,
+            ],
+            |row| row.get(0),
+        )?;
+
+        Ok(num_records == 1)
+    }
+
     /// Retrieve the most recent station number used with this ID and model.
     pub fn station_num_for_id(
         &self,
@@ -288,14 +308,13 @@ impl Archive {
             ",
         )?;
 
-        let most_recent_site: String = stmt
-            .query_row(
-                &[
-                    &station_num_raw as &dyn rusqlite::types::ToSql,
-                    &model.as_static_str() as &dyn rusqlite::types::ToSql,
-                ],
-                |row| row.get(0),
-            )?;
+        let most_recent_site: String = stmt.query_row(
+            &[
+                &station_num_raw as &dyn rusqlite::types::ToSql,
+                &model.as_static_str() as &dyn rusqlite::types::ToSql,
+            ],
+            |row| row.get(0),
+        )?;
 
         let most_recent_station_num = self.station_num_for_id(&most_recent_site, model)?;
 
@@ -526,6 +545,28 @@ mod unit {
         } else {
             panic!("Nothing found!");
         }
+    }
+
+    #[test]
+    fn test_file_exists() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        let kmso_station_num = StationNumber::from(727730); // Station number for KMSO
+        let model = Model::NAM;
+
+        let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
+        let second = NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0);
+        let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
+        let missing = NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0);
+        assert!(arch.file_exists(kmso_station_num, model, first).unwrap());
+        assert!(arch.file_exists(kmso_station_num, model, second).unwrap());
+        assert!(arch.file_exists(kmso_station_num, model, last).unwrap());
+        assert!(!arch.file_exists(kmso_station_num, model, missing).unwrap());
     }
 
     #[test]

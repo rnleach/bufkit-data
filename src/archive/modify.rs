@@ -295,12 +295,12 @@ mod unit {
         let model = Model::GFS;
 
         assert!(arch
-            .file_exists(site, model, &init_time)
+            .file_exists(site, model, init_time)
             .expect("Error checking db"));
         arch.remove(site, model, init_time)
             .expect("Error while removing.");
         assert!(!arch
-            .file_exists(site, model, &init_time)
+            .file_exists(site, model, init_time)
             .expect("Error checking db"));
     }
 
@@ -337,7 +337,7 @@ mod unit {
 
         for &(init_time, model) in &init_time_model_pairs {
             assert!(arch
-                .file_exists(station_num, model, &init_time)
+                .file_exists(station_num, model, init_time)
                 .expect("Error checking db"));
         }
 
@@ -345,7 +345,7 @@ mod unit {
 
         for &(init_time, model) in &init_time_model_pairs {
             assert!(!arch
-                .file_exists(station_num, model, &init_time)
+                .file_exists(station_num, model, init_time)
                 .expect("Error checking db"));
         }
     }

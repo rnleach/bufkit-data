@@ -6,9 +6,6 @@ use std::path::PathBuf;
 use chrono::NaiveDateTime;
 use std::convert::TryFrom;
 
-#[cfg(test)]
-use crate::models::Model;
-
 /// The archive.
 #[derive(Debug)]
 pub struct Archive {
@@ -74,27 +71,6 @@ impl Archive {
             coords,
             elevation,
         ))
-    }
-
-    /// Check to see if a file is present in the archive and it is retrieveable.
-    #[cfg(test)]
-    fn file_exists(
-        &self,
-        site: StationNumber,
-        model: Model,
-        init_time: &chrono::NaiveDateTime,
-    ) -> Result<bool, BufkitDataErr> {
-        let num_records: i32 = self.db_conn.query_row(
-            "SELECT COUNT(*) FROM files WHERE station_num = ?1 AND model = ?2 AND init_time = ?3",
-            &[
-                &Into::<i64>::into(site) as &dyn rusqlite::types::ToSql,
-                &model.as_static_str() as &dyn rusqlite::types::ToSql,
-                init_time as &dyn rusqlite::types::ToSql,
-            ],
-            |row| row.get(0),
-        )?;
-
-        Ok(num_records == 1)
     }
 }
 
