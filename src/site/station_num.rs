@@ -24,7 +24,7 @@ impl Into<i64> for StationNumber {
 
 impl Display for StationNumber {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        writeln!(formatter, "{}", self.0)
+        write!(formatter, "{}", self.0)
     }
 }
 
