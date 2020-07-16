@@ -1,4 +1,5 @@
 use chrono::NaiveDateTime;
+use rusqlite::OptionalExtension;
 use std::{collections::HashSet, io::Read, iter::FromIterator, str::FromStr};
 
 use super::Archive;
@@ -308,13 +309,19 @@ impl Archive {
             ",
         )?;
 
-        let most_recent_site: String = stmt.query_row(
-            &[
-                &station_num_raw as &dyn rusqlite::types::ToSql,
-                &model.as_static_str() as &dyn rusqlite::types::ToSql,
-            ],
-            |row| row.get(0),
-        )?;
+        let most_recent_site: String = match stmt
+            .query_row(
+                &[
+                    &station_num_raw as &dyn rusqlite::types::ToSql,
+                    &model.as_static_str() as &dyn rusqlite::types::ToSql,
+                ],
+                |row| row.get(0),
+            )
+            .optional()?
+        {
+            Some(id) => id,
+            None => return Ok(None),
+        };
 
         let most_recent_station_num = self.station_num_for_id(&most_recent_site, model)?;
 
@@ -385,18 +392,22 @@ impl Archive {
     }
 
     /// Get the number of files in the archive for the given station and model.
-    pub fn count(&self, station_num: StationNumber, model: Model) -> Result<u32, BufkitDataErr>
-    {
+    pub fn count(&self, station_num: StationNumber, model: Model) -> Result<u32, BufkitDataErr> {
         let station_num: u32 = Into::<u32>::into(station_num);
-        self.db_conn.query_row(
-            "
+        self.db_conn
+            .query_row(
+                "
                 SELECT COUNT(*)
                 FROM files
                 WHERE station_num = ?1 AND model = ?2
             ",
-            &[&station_num as &dyn rusqlite::types::ToSql, &model.as_static_str()],
-            |row| row.get(0),
-        ).map_err(BufkitDataErr::Database)
+                &[
+                    &station_num as &dyn rusqlite::types::ToSql,
+                    &model.as_static_str(),
+                ],
+                |row| row.get(0),
+            )
+            .map_err(BufkitDataErr::Database)
     }
 
     fn first_and_last_dates(
@@ -808,7 +819,7 @@ mod unit {
     }
 
     #[test]
-    fn test_count(){
+    fn test_count() {
         let TestArchive {
             tmp: _tmp,
             mut arch,
