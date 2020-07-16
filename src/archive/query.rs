@@ -384,6 +384,21 @@ impl Archive {
         Ok(to_ret)
     }
 
+    /// Get the number of files in the archive for the given station and model.
+    pub fn count(&self, station_num: StationNumber, model: Model) -> Result<u32, BufkitDataErr>
+    {
+        let station_num: u32 = Into::<u32>::into(station_num);
+        self.db_conn.query_row(
+            "
+                SELECT COUNT(*)
+                FROM files
+                WHERE station_num = ?1 AND model = ?2
+            ",
+            &[&station_num as &dyn rusqlite::types::ToSql, &model.as_static_str()],
+            |row| row.get(0),
+        ).map_err(BufkitDataErr::Database)
+    }
+
     fn first_and_last_dates(
         &self,
         station_num: StationNumber,
@@ -790,5 +805,22 @@ mod unit {
                 .count(),
             3
         );
+    }
+
+    #[test]
+    fn test_count(){
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        let kmso = StationNumber::from(727730); // Station number for KMSO
+        let model = Model::GFS;
+        assert_eq!(arch.count(kmso, model).unwrap(), 3);
+
+        let model = Model::NAM;
+        assert_eq!(arch.count(kmso, model).unwrap(), 3);
     }
 }
