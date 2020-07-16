@@ -39,11 +39,13 @@ impl Archive {
                 Err(err) => return AddFileResult::Error(err),
             };
 
-        if let Some(parsed_id) = parsed_site_id {
-            if site_id_hint != parsed_id {
-                return AddFileResult::Error(BufkitDataErr::LogicError("ids do not match."));
+        let mut site_id = &site_id_hint;
+        if let Some(parsed_id) = parsed_site_id.as_ref() {
+            if parsed_id != &site_id_hint {
+                site_id = parsed_id
             }
         }
+        let site_id = site_id;
 
         if self.site(station_num).is_none() {
             let new_site = SiteInfo {
@@ -56,8 +58,8 @@ impl Archive {
             }
         }
 
-        let file_name = self.compressed_file_name(&site_id_hint, model, init_time);
-        let site_id = Some(site_id_hint);
+        let file_name = self.compressed_file_name(site_id, model, init_time);
+        let site_id = Some(site_id);
 
         match std::fs::File::create(self.data_root().join(&file_name))
             .map_err(BufkitDataErr::IO)
