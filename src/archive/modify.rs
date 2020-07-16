@@ -39,11 +39,13 @@ impl Archive {
                 Err(err) => return AddFileResult::Error(err),
             };
 
+        /* FIXME: Add a new AddFileResult type to deal with this.
         if let Some(parsed_id) = parsed_site_id {
             if site_id_hint != parsed_id {
                 return AddFileResult::Error(BufkitDataErr::LogicError("ids do not match."));
             }
         }
+        */
 
         if self.site(station_num).is_none() {
             let new_site = SiteInfo {
