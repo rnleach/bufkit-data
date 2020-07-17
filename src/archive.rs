@@ -17,6 +17,7 @@ mod modify;
 pub use modify::AddFileResult;
 mod clean;
 mod query;
+pub use query::DownloadInfo;
 mod root;
 
 impl Archive {
