@@ -27,7 +27,11 @@ CREATE TABLE sites (
 CREATE UNIQUE INDEX fname ON files(file_name);
 
 -- For fast searches by metadata.
-CREATE UNIQUE INDEX no_dups_files ON files(model, station_num, init_time);
+CREATE UNIQUE INDEX no_dups_files ON files (
+	init_time	DESC,
+	model,
+	station_num
+);
 
 -- For fast searches including end times
 CREATE INDEX time_ranges ON files(model, station_num, init_time, end_time);
