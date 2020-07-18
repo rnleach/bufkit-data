@@ -13,6 +13,16 @@ use metfor::{Meters, Quantity};
 
 use super::Archive;
 
+struct InternalSiteInfo {
+    station_num: StationNumber,
+    model: Model,
+    id: Option<String>,
+    init_time: chrono::NaiveDateTime,
+    end_time: chrono::NaiveDateTime,
+    coords: Coords,
+    elevation: Meters,
+}
+
 impl Archive {
     /// Validate files listed in the index are in the archive too, if not remove them from the
     /// index.
@@ -114,8 +124,15 @@ impl Archive {
         arch.db_conn
             .execute("BEGIN TRANSACTION", rusqlite::NO_PARAMS)?;
         for extra_file in files_not_in_index {
-            let message = if let Some((station_num, model, id, init, end, coords, elev)) =
-                arch.extract_site_info_from_file(&extra_file)
+            let message = if let Some(InternalSiteInfo {
+                station_num,
+                model,
+                id,
+                init_time,
+                end_time,
+                coords,
+                elevation,
+            }) = arch.extract_site_info_from_file(&extra_file)
             {
                 if arch.site(station_num).is_none() {
                     let site = SiteInfo {
@@ -131,13 +148,13 @@ impl Archive {
                 match insert_stmt.execute(&[
                     &station_num as &dyn rusqlite::types::ToSql,
                     &model.as_static_str() as &dyn rusqlite::types::ToSql,
-                    &init as &dyn rusqlite::types::ToSql,
-                    &end as &dyn rusqlite::types::ToSql,
+                    &init_time as &dyn rusqlite::types::ToSql,
+                    &end_time as &dyn rusqlite::types::ToSql,
                     &extra_file,
                     &id,
                     &coords.lat,
                     &coords.lon,
-                    &elev.unpack(),
+                    &elevation.unpack(),
                 ]) {
                     Ok(_) => format!("Added {}", extra_file),
                     Err(_) => {
@@ -159,18 +176,7 @@ impl Archive {
         Ok(())
     }
 
-    fn extract_site_info_from_file(
-        &self,
-        fname: &str,
-    ) -> Option<(
-        StationNumber,
-        Model,
-        Option<String>,
-        chrono::NaiveDateTime,
-        chrono::NaiveDateTime,
-        Coords,
-        Meters,
-    )> {
+    fn extract_site_info_from_file(&self, fname: &str) -> Option<InternalSiteInfo> {
         let tokens: Vec<&str> = fname.split(|c| c == '_' || c == '.').collect();
 
         if tokens.len() != 5 || tokens[3] != "buf" || tokens[4] != "gz" {
@@ -193,7 +199,7 @@ impl Archive {
             Some(tokens[2].to_owned())
         };
 
-        Some((
+        Some(InternalSiteInfo {
             station_num,
             model,
             id,
@@ -201,6 +207,6 @@ impl Archive {
             end_time,
             coords,
             elevation,
-        ))
+        })
     }
 }
