@@ -15,8 +15,6 @@ pub enum BufkitDataErr {
     // Inherited errors from std
     /// Error forwarded from std
     IO(::std::io::Error),
-    /// Error sending message...
-    SenderError(::std::sync::mpsc::SendError<String>),
 
     // Other forwarded errors
     /// Database error
@@ -27,12 +25,22 @@ pub enum BufkitDataErr {
     GeneralError(String),
 
     // My own errors from this crate
+    /// File not found in the index.
+    NotInIndex,
+    /// The database structure is wrong.
+    InvalidSchema,
     /// Invalid model name
     InvalidModelName(String),
     /// Site ID does not exist.
     InvalidSiteId(String),
     /// Not enough data to complete the task.
     NotEnoughData,
+    /// Sounding was missing a valid time
+    MissingValidTime,
+    /// Missing station information.
+    MissingStationData,
+    /// There was an internal logic error.
+    LogicError(&'static str),
 }
 
 impl Display for BufkitDataErr {
@@ -44,15 +52,19 @@ impl Display for BufkitDataErr {
             SoundingBufkit(err) => write!(f, "error from sounding-bufkit: {}", err),
 
             IO(err) => write!(f, "std lib io error: {}", err),
-            SenderError(err) => write!(f, "error sending message across threads: {}", err),
 
             Database(err) => write!(f, "database error: {}", err),
             StrumError(err) => write!(f, "error forwarded from strum crate: {}", err),
             GeneralError(msg) => write!(f, "general error forwarded: {}", msg),
 
+            NotInIndex => write!(f, "no match in the index"),
+            InvalidSchema => write!(f, "invalid index format"),
             InvalidModelName(mdl_nm) => write!(f, "invalid model name: {}", mdl_nm),
             InvalidSiteId(site_id) => write!(f, "invalid site id: {}", site_id),
             NotEnoughData => write!(f, "not enough data to complete task"),
+            MissingValidTime => write!(f, "sounding missing a valid time"),
+            MissingStationData => write!(f, "not enough information about the station"),
+            LogicError(msg) => write!(f, "internal logic error: {}", msg),
         }
     }
 }

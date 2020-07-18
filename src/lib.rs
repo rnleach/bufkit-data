@@ -13,17 +13,16 @@
 //
 // Public API
 //
-pub use crate::archive::Archive;
+pub use crate::archive::{AddFileResult, Archive, DownloadInfo, StationSummary};
 pub use crate::errors::BufkitDataErr;
-pub use crate::inventory::Inventory;
 pub use crate::models::Model;
-pub use crate::site::{Site, StateProv};
+pub use crate::site::{SiteInfo, StateProv, StationNumber};
 
 //
 // Implementation only
 //
 mod archive;
+mod coords;
 mod errors;
-mod inventory;
 mod models;
 mod site;
