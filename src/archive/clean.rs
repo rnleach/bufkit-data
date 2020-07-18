@@ -11,9 +11,9 @@ use crate::{
 
 use metfor::{Meters, Quantity};
 
-use super::Archive;
+use super::{InternalSiteInfo, Archive};
 
-struct InternalSiteInfo {
+struct CleanMethodInternalSiteInfo {
     station_num: StationNumber,
     model: Model,
     id: Option<String>,
@@ -124,7 +124,7 @@ impl Archive {
         arch.db_conn
             .execute("BEGIN TRANSACTION", rusqlite::NO_PARAMS)?;
         for extra_file in files_not_in_index {
-            let message = if let Some(InternalSiteInfo {
+            let message = if let Some(CleanMethodInternalSiteInfo {
                 station_num,
                 model,
                 id,
@@ -176,7 +176,7 @@ impl Archive {
         Ok(())
     }
 
-    fn extract_site_info_from_file(&self, fname: &str) -> Option<InternalSiteInfo> {
+    fn extract_site_info_from_file(&self, fname: &str) -> Option<CleanMethodInternalSiteInfo> {
         let tokens: Vec<&str> = fname.split(|c| c == '_' || c == '.').collect();
 
         if tokens.len() != 5 || tokens[3] != "buf" || tokens[4] != "gz" {
@@ -190,7 +190,7 @@ impl Archive {
         let mut s = String::new();
         decoder.read_to_string(&mut s).ok()?;
 
-        let (station_num, parsed_site_id, init_time, end_time, coords, elevation) =
+        let InternalSiteInfo{station_num, id: parsed_site_id, init_time, end_time, coords, elevation} =
             Self::parse_site_info(&s).ok()?;
 
         let id = if parsed_site_id.is_some() {
@@ -199,7 +199,7 @@ impl Archive {
             Some(tokens[2].to_owned())
         };
 
-        Some(InternalSiteInfo {
+        Some(CleanMethodInternalSiteInfo {
             station_num,
             model,
             id,

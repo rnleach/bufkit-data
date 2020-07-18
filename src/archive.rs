@@ -20,20 +20,17 @@ mod query;
 pub use query::{DownloadInfo, StationSummary};
 mod root;
 
+struct InternalSiteInfo {
+    station_num: StationNumber,
+    id: Option<String>,
+    init_time: chrono::NaiveDateTime,
+    end_time: chrono::NaiveDateTime,
+    coords: Coords,
+    elevation: metfor::Meters,
+}
+
 impl Archive {
-    fn parse_site_info(
-        text: &str,
-    ) -> Result<
-        (
-            StationNumber,
-            Option<String>,
-            chrono::NaiveDateTime,
-            chrono::NaiveDateTime,
-            Coords,
-            metfor::Meters,
-        ),
-        BufkitDataErr,
-    > {
+    fn parse_site_info(text: &str) -> Result<InternalSiteInfo, BufkitDataErr> {
         let bdata = sounding_bufkit::BufkitData::init(text, "")?;
         let mut iter = bdata.into_iter();
 
@@ -61,9 +58,9 @@ impl Archive {
             .map_err(|_| BufkitDataErr::GeneralError("negative station number?".to_owned()))
             .map(StationNumber::from)?;
 
-        Ok((
+        Ok(InternalSiteInfo {
             station_num,
-            first
+            id: first
                 .station_info()
                 .station_id()
                 .map(|id| id.to_uppercase()),
@@ -71,7 +68,7 @@ impl Archive {
             end_time,
             coords,
             elevation,
-        ))
+        })
     }
 }
 

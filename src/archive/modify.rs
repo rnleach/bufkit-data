@@ -1,7 +1,7 @@
 use metfor::Quantity;
 use std::io::Write;
 
-use super::Archive;
+use super::{Archive, InternalSiteInfo};
 
 use crate::{
     errors::BufkitDataErr,
@@ -33,11 +33,17 @@ impl Archive {
     pub fn add(&self, site_id_hint: &str, model: Model, text_data: &str) -> AddFileResult {
         let site_id_hint = site_id_hint.to_uppercase();
 
-        let (station_num, parsed_site_id, init_time, end_time, coords, elevation) =
-            match Self::parse_site_info(text_data) {
-                Ok(val) => val,
-                Err(err) => return AddFileResult::Error(err),
-            };
+        let InternalSiteInfo {
+            station_num,
+            id: parsed_site_id,
+            init_time,
+            end_time,
+            coords,
+            elevation,
+        } = match Self::parse_site_info(text_data) {
+            Ok(val) => val,
+            Err(err) => return AddFileResult::Error(err),
+        };
 
         let mut site_id = &site_id_hint;
         if let Some(parsed_id) = parsed_site_id.as_ref() {
