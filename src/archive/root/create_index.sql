@@ -36,4 +36,11 @@ CREATE UNIQUE INDEX no_dups_files ON files (
 -- For fast searches including end times
 CREATE INDEX time_ranges ON files(model, station_num, init_time, end_time);
 
+-- For fast queries relating station numbers and ids.
+CREATE INDEX station_num_mapping ON files (
+	station_num	ASC,
+	id,
+	model
+);
+
 COMMIT;

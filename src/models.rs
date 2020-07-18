@@ -5,7 +5,9 @@ use std::fmt;
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
 /// Models potentially stored in the archive.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, IntoStaticStr, EnumIter, Hash)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, Debug, EnumString, IntoStaticStr, EnumIter, Hash, PartialOrd, Ord,
+)]
 pub enum Model {
     /// The U.S. Global Forecast System
     #[strum(

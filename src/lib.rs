@@ -13,7 +13,7 @@
 //
 // Public API
 //
-pub use crate::archive::{AddFileResult, Archive, DownloadInfo};
+pub use crate::archive::{AddFileResult, Archive, DownloadInfo, StationSummary};
 pub use crate::errors::BufkitDataErr;
 pub use crate::models::Model;
 pub use crate::site::{SiteInfo, StateProv, StationNumber};

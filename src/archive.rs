@@ -17,7 +17,7 @@ mod modify;
 pub use modify::AddFileResult;
 mod clean;
 mod query;
-pub use query::DownloadInfo;
+pub use query::{DownloadInfo, StationSummary};
 mod root;
 
 impl Archive {

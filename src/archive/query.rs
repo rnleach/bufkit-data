@@ -12,6 +12,8 @@ use crate::{
 
 mod auto_download_info;
 pub use auto_download_info::DownloadInfo;
+mod station_summary;
+pub use station_summary::StationSummary;
 
 impl Archive {
     /// Retrieve a list of sites in the archive.
