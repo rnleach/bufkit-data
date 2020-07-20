@@ -34,6 +34,25 @@ impl SiteInfo {
             || self.time_zone.is_none()
             || !self.station_num.is_valid()
     }
+
+    /// Get description of the site without all the meta-data details.
+    pub fn description(&self) -> String {
+        let mut desc = String::new();
+
+        if let Some(ref nm) = self.name {
+            desc += nm;
+            if let Some(st) = self.state {
+                desc += ", ";
+                desc += st.as_static_str();
+            }
+
+            desc += " ";
+        }
+
+        desc += &format!("({})", self.station_num);
+
+        desc
+    }
 }
 
 impl Display for SiteInfo {
