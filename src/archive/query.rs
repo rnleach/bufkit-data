@@ -67,9 +67,35 @@ impl Archive {
         &self,
         model: Model,
     ) -> Result<Vec<(SiteInfo, String)>, BufkitDataErr> {
-        let mut stmt = self
-            .db_conn
-            .prepare(include_str!("query/sites_and_ids_for_model.sql"))?;
+        self.db_conn
+            .execute("DROP TABLE IF EXISTS temp_ids", rusqlite::NO_PARAMS)?;
+        self.db_conn.execute(
+            "
+                CREATE TEMP TABLE temp_ids AS
+                SELECT files.id, files.station_num
+                FROM files JOIN (
+                    SELECT files.station_num, MAX(files.init_time) as maxtime
+                    FROM files 
+                    GROUP BY files.station_num) as maxs
+                ON maxs.station_num = files.station_num AND files.init_time = maxs.maxtime
+                WHERE files.model = ?1
+            ",
+            &[&model.as_static_str()],
+        )?;
+
+        let mut stmt = self.db_conn.prepare(
+            "
+                SELECT 
+                    sites.station_num,
+                    sites.name, 
+                    sites.state, 
+                    sites.notes, 
+                    sites.tz_offset_sec, 
+                    sites.auto_download, 
+                    temp_ids.id
+                FROM sites JOIN temp_ids ON temp_ids.station_num = sites.station_num
+            ",
+        )?;
 
         let parse_row = |row: &rusqlite::Row| -> Result<(SiteInfo, String), rusqlite::Error> {
             let site_info = Self::parse_row_to_site(row)?;
@@ -78,7 +104,7 @@ impl Archive {
         };
 
         let vals: Result<Vec<(SiteInfo, String)>, BufkitDataErr> = stmt
-            .query_and_then(&[&model.as_static_str()], parse_row)?
+            .query_and_then(rusqlite::NO_PARAMS, parse_row)?
             .map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
 
