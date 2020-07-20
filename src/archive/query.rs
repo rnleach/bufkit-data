@@ -76,6 +76,7 @@ impl Archive {
                 FROM files JOIN (
                     SELECT files.station_num, MAX(files.init_time) as maxtime
                     FROM files 
+                    WHERE files.model = ?1
                     GROUP BY files.station_num) as maxs
                 ON maxs.station_num = files.station_num AND files.init_time = maxs.maxtime
                 WHERE files.model = ?1
