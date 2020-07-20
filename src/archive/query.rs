@@ -62,6 +62,29 @@ impl Archive {
         })
     }
 
+    /// Retrieve the sites with their most recent station id for the given model.
+    pub fn sites_and_ids_for(
+        &self,
+        model: Model,
+    ) -> Result<Vec<(SiteInfo, String)>, BufkitDataErr> {
+        let mut stmt = self
+            .db_conn
+            .prepare(include_str!("query/sites_and_ids_for_model.sql"))?;
+
+        let parse_row = |row: &rusqlite::Row| -> Result<(SiteInfo, String), rusqlite::Error> {
+            let site_info = Self::parse_row_to_site(row)?;
+            let site_id: String = row.get(6)?;
+            Ok((site_info, site_id))
+        };
+
+        let vals: Result<Vec<(SiteInfo, String)>, BufkitDataErr> = stmt
+            .query_and_then(&[&model.as_static_str()], parse_row)?
+            .map(|res| res.map_err(BufkitDataErr::Database))
+            .collect();
+
+        vals
+    }
+
     /// Retrieve the information about a single site id
     pub fn site(&self, station_num: StationNumber) -> Option<SiteInfo> {
         self.db_conn

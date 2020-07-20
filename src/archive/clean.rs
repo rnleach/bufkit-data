@@ -11,7 +11,7 @@ use crate::{
 
 use metfor::{Meters, Quantity};
 
-use super::{InternalSiteInfo, Archive};
+use super::{Archive, InternalSiteInfo};
 
 struct CleanMethodInternalSiteInfo {
     station_num: StationNumber,
@@ -190,8 +190,14 @@ impl Archive {
         let mut s = String::new();
         decoder.read_to_string(&mut s).ok()?;
 
-        let InternalSiteInfo{station_num, id: parsed_site_id, init_time, end_time, coords, elevation} =
-            Self::parse_site_info(&s).ok()?;
+        let InternalSiteInfo {
+            station_num,
+            id: parsed_site_id,
+            init_time,
+            end_time,
+            coords,
+            elevation,
+        } = Self::parse_site_info(&s).ok()?;
 
         let id = if parsed_site_id.is_some() {
             parsed_site_id
