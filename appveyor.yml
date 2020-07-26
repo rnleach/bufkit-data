@@ -40,11 +40,9 @@ environment:
   # Stable 64-bit MSVC
     - channel: stable
       target: x86_64-pc-windows-msvc
-      PYTHON: "C:\\Python38-x64"
   # Beta 64-bit MSVC
     - channel: beta
       target: x86_64-pc-windows-msvc
-      PYTHON: "C:\\Python38-x64"
 
 ### Allowed failures ###
 
@@ -81,4 +79,3 @@ build: false
 # environment variable.
 test_script:
   - cargo test --verbose %cargoflags%
-  - cargo build --features pylib
