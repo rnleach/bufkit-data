@@ -18,6 +18,9 @@ pub use crate::errors::BufkitDataErr;
 pub use crate::models::Model;
 pub use crate::site::{SiteInfo, StateProv, StationNumber};
 
+#[cfg(feature = "pylib")]
+mod py_lib;
+
 //
 // Implementation only
 //

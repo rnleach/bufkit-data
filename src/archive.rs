@@ -1,12 +1,14 @@
 //! An archive of bufkit soundings.
 
-use crate::{coords::Coords, BufkitDataErr, StationNumber};
-use std::path::PathBuf;
+use crate::{coords::Coords, errors::BufkitDataErr, site::StationNumber};
 
 use chrono::NaiveDateTime;
-use std::convert::TryFrom;
+#[cfg(feature = "pylib")]
+use pyo3::prelude::*;
+use std::{convert::TryFrom, path::PathBuf};
 
 /// The archive.
+#[cfg_attr(feature = "pylib", pyclass(module = "bufkit_data"))]
 #[derive(Debug)]
 pub struct Archive {
     root: PathBuf,                 // The root directory.

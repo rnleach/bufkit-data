@@ -4,7 +4,7 @@
 ## Operating System (VM environment) ##
 
 # Rust needs at least Visual Studio 2013 Appveyor OS for MSVC targets.
-os: Visual Studio 2015
+os: Visual Studio 2017
 
 ## Build Matrix ##
 
@@ -98,4 +98,5 @@ build: false
 # directly or perform other testing commands. Rust will automatically be placed in the PATH
 # environment variable.
 test_script:
-- cargo test --verbose %cargoflags%
+  - cargo test --verbose %cargoflags%
+  - cargo build --features pylib
