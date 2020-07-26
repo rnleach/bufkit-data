@@ -40,29 +40,11 @@ environment:
   # Stable 64-bit MSVC
     - channel: stable
       target: x86_64-pc-windows-msvc
+      PYTHON: "C:\\Python38-x64"
   # Beta 64-bit MSVC
     - channel: beta
       target: x86_64-pc-windows-msvc
-  # Nightly 64-bit MSVC
-    - channel: nightly
-      target: x86_64-pc-windows-msvc
-      #cargoflags: --features "unstable"
-
-### GNU Toolchains ###
-
-  # These are broken on appveyor now because of a gcc dependency. Since posix builds
-  # are being tested by travis.ci, I'll turn these off for now.
-
-  # # Stable 64-bit GNU
-  #   - channel: stable
-  #     target: x86_64-pc-windows-gnu
-  # # Beta 64-bit GNU
-  #   - channel: beta
-  #     target: x86_64-pc-windows-gnu
-  # # Nightly 64-bit GNU
-  #   - channel: nightly
-  #     target: x86_64-pc-windows-gnu
-  #     #cargoflags: --features "unstable"
+      PYTHON: "C:\\Python38-x64"
 
 ### Allowed failures ###
 
