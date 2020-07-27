@@ -1,0 +1,4 @@
+# Mark SQLite3 files as SQL
+*.sql linguist-language=SQL
+*.sqlite linguist-language=SQL
+

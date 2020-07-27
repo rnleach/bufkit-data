@@ -8,4 +8,5 @@ rust:
 
 script:
   - cargo test --verbose
+  - cargo build --features pylib
   - if [ "$TRAVIS_BRANCH" == "master" ]; then echo "Working on master branch" && cargo package --verbose; fi

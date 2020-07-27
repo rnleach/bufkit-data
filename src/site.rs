@@ -1,4 +1,6 @@
 use chrono::FixedOffset;
+#[cfg(feature = "pylib")]
+use pyo3::prelude::*;
 use std::fmt::Display;
 
 mod station_num;
@@ -8,6 +10,7 @@ mod state_prov;
 pub use state_prov::StateProv;
 
 /// Description of a site with a sounding.
+#[cfg_attr(feature = "pylib", pyclass(module = "bufkit_data"))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SiteInfo {
     /// Station number, this should be unique to the site. Site ids sometimes change around.
@@ -78,6 +81,23 @@ impl Default for SiteInfo {
             time_zone: None,
             auto_download: false,
         }
+    }
+}
+
+#[cfg(feature = "pylib")]
+#[cfg_attr(feature = "pylib", pymethods)]
+impl SiteInfo {
+    #[getter]
+    fn get_station_num(&self) -> StationNumber {
+        self.station_num
+    }
+}
+
+#[cfg(feature = "pylib")]
+#[cfg_attr(feature = "pylib", pyproto)]
+impl pyo3::PyObjectProtocol<'_> for SiteInfo {
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(self.description())
     }
 }
 
