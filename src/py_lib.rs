@@ -14,7 +14,8 @@ impl Archive {
         Ok(Archive::connect(&root)?)
     }
 
-    fn root_path(&self) -> PyResult<String> {
+    #[getter]
+    fn get_root(&self) -> PyResult<String> {
         Ok(self
             .root()
             .to_str()
