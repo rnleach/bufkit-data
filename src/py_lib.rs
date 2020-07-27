@@ -1,5 +1,5 @@
 use crate::{archive::Archive, errors::BufkitDataErr, models::Model};
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime};
 use pyo3::{
     exceptions,
     prelude::*,
@@ -39,18 +39,38 @@ impl Archive {
     ) -> PyResult<String> {
         let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
         let station_num = self.station_num_for_id(id, model)?;
-
-        let year = valid_time.get_year();
-        let month: u32 = valid_time.get_month().into();
-        let day: u32 = valid_time.get_day().into();
-        let hour: u32 = valid_time.get_hour().into();
-        let minute: u32 = valid_time.get_minute().into();
-        let second: u32 = valid_time.get_second().into();
-        let valid_time = NaiveDate::from_ymd(year, month, day).and_hms(hour, minute, second);
+        let valid_time = convert_to_chrono(valid_time);
 
         self.retrieve(station_num, model, valid_time)
             .map_err(Into::into)
     }
+
+    fn retrieve_all_in(
+        &self,
+        id: &str,
+        model: &str,
+        start: &PyDateTime,
+        end: &PyDateTime,
+    ) -> PyResult<Vec<String>> {
+        let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
+        let station_num = self.station_num_for_id(id, model)?;
+        let start = convert_to_chrono(start);
+        let end = convert_to_chrono(end);
+
+        self.retrieve_all_valid_in(station_num, model, start, end)
+            .map(|iter| iter.collect())
+            .map_err(Into::into)
+    }
+}
+
+fn convert_to_chrono(dt: &PyDateTime) -> NaiveDateTime {
+    let year = dt.get_year();
+    let month: u32 = dt.get_month().into();
+    let day: u32 = dt.get_day().into();
+    let hour: u32 = dt.get_hour().into();
+    let minute: u32 = dt.get_minute().into();
+    let second: u32 = dt.get_second().into();
+    NaiveDate::from_ymd(year, month, day).and_hms(hour, minute, second)
 }
 
 #[pymodule]
