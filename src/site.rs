@@ -91,6 +91,11 @@ impl SiteInfo {
     fn get_station_num(&self) -> StationNumber {
         self.station_num
     }
+
+    #[getter]
+    fn get_station_name(&self) -> String {
+        self.name.map(|nm| nm.clone()).unwrap_or_else(|| "No Name".to_owned())
+    }
 }
 
 #[cfg(feature = "pylib")]
