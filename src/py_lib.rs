@@ -1,4 +1,9 @@
-use crate::{archive::Archive, errors::BufkitDataErr, models::Model, site::StationNumber};
+use crate::{
+    archive::Archive,
+    errors::BufkitDataErr,
+    models::Model,
+    site::{SiteInfo, StationNumber},
+};
 use chrono::{NaiveDate, NaiveDateTime};
 use pyo3::{
     exceptions,
@@ -79,6 +84,18 @@ impl Archive {
         let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
         self.ids(station_num, model).map_err(Into::into)
     }
+
+    fn info_for_stn_num(&self, py: Python, station_num: StationNumber) -> PyResult<PyObject> {
+        match self.site(station_num) {
+            Some(site_info) => Ok(site_info.into_py(py)),
+            None => Ok(py.None()),
+        }
+    }
+
+    /// Get a list of all sites in the archive.
+    fn all_sites(&self) -> PyResult<Vec<SiteInfo>> {
+        self.sites().map_err(Into::into)
+    }
 }
 
 #[pyfunction]
@@ -98,10 +115,12 @@ fn convert_to_chrono(dt: &PyDateTime) -> NaiveDateTime {
     NaiveDate::from_ymd(year, month, day).and_hms(hour, minute, second)
 }
 
+/// Read only access to a bufkit-data archive.
 #[pymodule]
 fn bufkit_data(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<Archive>()?;
     m.add_class::<StationNumber>()?;
+    m.add_class::<SiteInfo>()?;
     m.add_wrapped(wrap_pyfunction!(all_models))?;
 
     Ok(())
