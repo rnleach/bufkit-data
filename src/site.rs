@@ -94,7 +94,7 @@ impl SiteInfo {
 
     #[getter]
     fn get_station_name(&self) -> String {
-        self.name.map(|nm| nm.clone()).unwrap_or_else(|| "No Name".to_owned())
+        self.name.clone().unwrap_or_else(|| "No Name".to_owned())
     }
 }
 
