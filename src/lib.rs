@@ -17,21 +17,25 @@
 //! `pip install maturin` and install the bufkit_data package by going into the directory
 //! bufkit-data is cloned into and running:
 //!
-//! ``` shell
+//! ```shell
 //! maturin develop --release --strip --cargo-extra-args="--features pylib"
+//!
 //! ```
 //!
 //! After this installation, you should be able to use `bufkit_data` from python with:
-//! ``` python
+//! ```python
 //! import bufkit_data as bd
 //!
 //! arch = bd.Archive("Path/to/my_archive")
-//! most_recent_ord_nam = arch.most_recent("kord", "nam4km")
+//! ord = arch.id_to_station_num("kord", "nam4km")
+//! most_recent_ord_nam = arch.most_recent(ord, "nam4km")
 //!
 //! from datetime import datetime as dt
 //! valid_time = dt(2020, 5, 5, 12, 0)
 //!
-//! old_ord_gfs = arch.retrieve_sounding("kord", "gfs", valid_time)
+//! ord = arch.id_to_station_num("kord", "gfs")
+//! old_ord_gfs = arch.retrieve_sounding(ord, "gfs", valid_time)
+//!
 //! ```
 #![deny(missing_docs)]
 
