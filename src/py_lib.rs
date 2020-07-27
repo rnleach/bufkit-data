@@ -1,11 +1,13 @@
-use crate::{archive::Archive, errors::BufkitDataErr, models::Model};
+use crate::{archive::Archive, errors::BufkitDataErr, models::Model, site::StationNumber};
 use chrono::{NaiveDate, NaiveDateTime};
 use pyo3::{
     exceptions,
     prelude::*,
     types::{PyDateAccess, PyDateTime, PyTimeAccess},
+    wrap_pyfunction,
 };
 use std::str::FromStr;
+use strum::IntoEnumIterator;
 
 #[pymethods]
 impl Archive {
@@ -25,21 +27,19 @@ impl Archive {
             ))?)
     }
 
-    fn most_recent(&self, id: &str, model: &str) -> PyResult<String> {
+    fn most_recent(&self, station_num: StationNumber, model: &str) -> PyResult<String> {
         let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
-        let station_num = self.station_num_for_id(id, model)?;
         self.retrieve_most_recent(station_num, model)
             .map_err(Into::into)
     }
 
     fn retrieve_sounding(
         &self,
-        id: &str,
+        station_num: StationNumber,
         model: &str,
         valid_time: &PyDateTime,
     ) -> PyResult<String> {
         let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
-        let station_num = self.station_num_for_id(id, model)?;
         let valid_time = convert_to_chrono(valid_time);
 
         self.retrieve(station_num, model, valid_time)
@@ -48,13 +48,12 @@ impl Archive {
 
     fn retrieve_all_in(
         &self,
-        id: &str,
+        station_num: StationNumber,
         model: &str,
         start: &PyDateTime,
         end: &PyDateTime,
     ) -> PyResult<Vec<String>> {
         let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
-        let station_num = self.station_num_for_id(id, model)?;
         let start = convert_to_chrono(start);
         let end = convert_to_chrono(end);
 
@@ -62,6 +61,31 @@ impl Archive {
             .map(|iter| iter.collect())
             .map_err(Into::into)
     }
+
+    fn id_to_station_num(&self, id: &str, model: &str) -> PyResult<StationNumber> {
+        let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
+        self.station_num_for_id(id, model).map_err(Into::into)
+    }
+
+    fn last_id(&self, py: Python, station_num: StationNumber, model: &str) -> PyResult<PyObject> {
+        let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
+        match self.most_recent_id(station_num, model)? {
+            Some(val) => Ok(PyObject::from_py(val, py)),
+            None => Ok(py.None()),
+        }
+    }
+
+    fn all_ids(&self, station_num: StationNumber, model: &str) -> PyResult<Vec<String>> {
+        let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
+        self.ids(station_num, model).map_err(Into::into)
+    }
+}
+
+#[pyfunction]
+fn all_models() -> Vec<String> {
+    Model::iter()
+        .map(|m| m.as_static_str().to_owned())
+        .collect()
 }
 
 fn convert_to_chrono(dt: &PyDateTime) -> NaiveDateTime {
@@ -77,6 +101,8 @@ fn convert_to_chrono(dt: &PyDateTime) -> NaiveDateTime {
 #[pymodule]
 fn bufkit_data(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<Archive>()?;
+    m.add_class::<StationNumber>()?;
+    m.add_wrapped(wrap_pyfunction!(all_models))?;
 
     Ok(())
 }
