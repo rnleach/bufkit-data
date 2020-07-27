@@ -32,10 +32,10 @@ import bufkit_data as bd
 arch = bd.Archive("Path/to/my_archive")
 most_recent_ord_nam = arch.most_recent("kord", "nam4km")
 
-import datetime.datetime as dt
+from datetime import datetime as dt
 valid_time = dt(2020, 5, 5, 12, 0)
 
-old_ord_gfs = arch.retreive_sounding("kord", "gfs", valid_time)
+old_ord_gfs = arch.retrieve_sounding("kord", "gfs", valid_time)
 ```
 
 License: MIT
