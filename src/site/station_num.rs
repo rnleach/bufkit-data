@@ -4,7 +4,7 @@ use std::fmt::Display;
 
 /// New type wrapper for a station number.
 #[cfg_attr(feature = "pylib", pyclass(module = "bufkit_data"))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StationNumber {
     num: u32,
 }

@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
-
 use super::Archive;
-
-use crate::errors::BufkitDataErr;
+use crate::{errors::BufkitDataErr, models::Model, site::StationNumber};
+use chrono::NaiveDateTime;
+use rusqlite::ToSql;
+use std::path::{Path, PathBuf};
 
 impl Archive {
     const DATA_DIR: &'static str = "data";
@@ -49,6 +49,82 @@ impl Archive {
     /// Get the directory the data files are stored in.
     pub(crate) fn data_root(&self) -> PathBuf {
         self.root.join(Archive::DATA_DIR)
+    }
+
+    /// Export part of the archive.
+    pub fn export(
+        &self,
+        stations: &[StationNumber],
+        models: &[Model],
+        start: NaiveDateTime,
+        end: NaiveDateTime,
+        dest: &Path,
+    ) -> Result<(), BufkitDataErr> {
+        let new_db = Self::create(&dest)?;
+        let db_file = new_db.root.join(Archive::DB_FILE);
+
+        let statement = &format!(
+            "ATTACH '{}' AS ex;",
+            db_file.to_str().ok_or(BufkitDataErr::GeneralError(
+                "Unable to convert path to string".to_owned()
+            ))?
+        );
+        self.db_conn.execute(statement, rusqlite::NO_PARAMS)?;
+
+        let mut sites_stmt = self.db_conn.prepare(
+            "
+                INSERT INTO ex.sites 
+                SELECT * FROM main.sites 
+                WHERE main.sites.station_num = ?1
+            ",
+        )?;
+
+        let mut files_stmt = self.db_conn.prepare(
+            "
+                INSERT INTO ex.files
+                SELECT * FROM main.files 
+                WHERE main.files.station_num = ?1 AND main.files.model = ?2 
+                    AND main.files.init_time >= ?3 AND main.files.init_time <= ?4
+            ",
+        )?;
+
+        let source_dir = self.root.join(Archive::DATA_DIR);
+        let dest_dir = dest.join(Archive::DATA_DIR);
+        let mut file_names_stmt = self.db_conn.prepare(
+            "
+                SELECT ex.files.file_name FROM ex.files
+                WHERE ex.files.station_num = ?1 AND ex.files.model = ?2
+                    AND ex.files.init_time >= ?3 AND ex.files.init_time <= ?4
+            ",
+        )?;
+
+        for &stn in stations {
+            let stn_num: u32 = stn.into();
+            sites_stmt.execute(&[stn_num])?;
+
+            for &model in models {
+                files_stmt.execute(&[
+                    &stn_num as &dyn ToSql,
+                    &model.as_static_str(),
+                    &start,
+                    &end,
+                ])?;
+
+                let fnames = file_names_stmt.query_and_then(
+                    &[&stn_num as &dyn ToSql, &model.as_static_str(), &start, &end],
+                    |row| -> Result<String, _> { row.get(0) },
+                )?;
+
+                for fname in fnames {
+                    let fname = fname?;
+                    let src = source_dir.join(&fname);
+                    let dest = dest_dir.join(fname);
+                    std::fs::copy(src, dest)?;
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
