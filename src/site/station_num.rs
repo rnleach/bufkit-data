@@ -52,6 +52,11 @@ impl StationNumber {
     fn py_new(num: u32) -> Self {
         Self::new(num)
     }
+
+    #[getter]
+    fn get_as_number(&self) -> u32 {
+        self.num 
+    }
 }
 
 #[cfg(feature = "pylib")]
