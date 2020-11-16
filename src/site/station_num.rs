@@ -55,7 +55,7 @@ impl StationNumber {
 
     #[getter]
     fn get_as_number(&self) -> u32 {
-        self.num 
+        self.num
     }
 }
 

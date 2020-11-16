@@ -75,7 +75,7 @@ impl Archive {
     fn last_id(&self, py: Python, station_num: StationNumber, model: &str) -> PyResult<PyObject> {
         let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
         match self.most_recent_id(station_num, model)? {
-            Some(val) => Ok(PyObject::from_py(val, py)),
+            Some(val) => Ok(pyo3::conversion::ToPyObject::to_object(&val, py)),
             None => Ok(py.None()),
         }
     }
@@ -128,6 +128,6 @@ fn bufkit_data(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
 impl std::convert::From<BufkitDataErr> for PyErr {
     fn from(err: BufkitDataErr) -> PyErr {
-        exceptions::Exception::py_err(err.to_string())
+        exceptions::PyException::new_err(err.to_string())
     }
 }

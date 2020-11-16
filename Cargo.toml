@@ -1,6 +1,6 @@
 [package]
 name = "bufkit-data"
-version = "0.15.2"
+version = "0.16.0"
 authors = ["Ryan <rnleach@users.noreply.github.com>"]
 description = "A crate to manage an archive of bufkit files."
 repository = "https://github.com/rnleach/bufkit-data.git"
@@ -22,12 +22,12 @@ pylib = ["pyo3"]
 chrono = "^0.4"
 flate2 = {version = "1.0", features = ["rust_backend"], default-features = false }
 metfor = "^0.7.4"
-rusqlite = { version = "0.23.1", features = ["bundled", "chrono"], default-features = false }
+rusqlite = { version = "0.24", features = ["bundled", "chrono"], default-features = false }
 sounding-analysis = "^0.14"
 sounding-bufkit = "0.14"
-strum = "0.18"
-strum_macros = "0.18"
-pyo3 = {version = "^0.11", features = ["extension-module"], optional = true}
+strum = "0.19"
+strum_macros = "0.19"
+pyo3 = {version = "^0.12", features = ["extension-module"], optional = true}
 
 [dev-dependencies]
 tempdir = "0.3"
