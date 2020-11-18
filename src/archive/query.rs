@@ -94,7 +94,7 @@ impl Archive {
 
         let parse_row = |row: &rusqlite::Row| -> Result<(SiteInfo, String), rusqlite::Error> {
             let site_info = Self::parse_row_to_site(row)?;
-            let site_id: String = row.get(6)?;
+            let site_id: String = row.get(5)?;
             Ok((site_info, site_id))
         };
 
