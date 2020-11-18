@@ -10,6 +10,7 @@ use crate::{
     site::{SiteInfo, StateProv, StationNumber},
 };
 
+#[deprecated]
 mod auto_download_info;
 pub use auto_download_info::DownloadInfo;
 mod station_summary;
@@ -153,6 +154,7 @@ impl Archive {
     }
 
     /// Get a list of auto-download sites with the id to use to download them.
+    #[deprecated]
     pub fn auto_downloads(&self) -> Result<Vec<DownloadInfo>, BufkitDataErr> {
         let mut stmt = self.db_conn.prepare(
             "
@@ -392,12 +394,15 @@ impl Archive {
     ) -> Result<Option<String>, BufkitDataErr> {
         let station_num_raw: u32 = Into::<u32>::into(station_num);
 
+        // FIXME: Query station number with this, then if it doesn't match the one we asked for
+        // return None.
         let mut stmt = self.db_conn.prepare(
             "
                 SELECT id, init_time 
                 FROM files
                 WHERE station_num = ?1 AND model = ?2
                 ORDER BY init_time DESC
+                LIMIT 1
             ",
         )?;
 

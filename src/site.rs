@@ -25,6 +25,7 @@ pub struct SiteInfo {
     /// Time zone information
     pub time_zone: Option<FixedOffset>,
     /// Mark this site for automatic updates/downloads
+    #[deprecated]
     pub auto_download: bool,
 }
 

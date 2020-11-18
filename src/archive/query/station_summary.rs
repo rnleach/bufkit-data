@@ -24,6 +24,7 @@ pub struct StationSummary {
     /// The time zone offset to local standard time.
     pub time_zone: Option<FixedOffset>,
     /// Is this site marked for automatic downloads.
+    #[deprecated]
     pub auto_download: bool,
     /// The number of files in the archive related to this site.
     pub number_of_files: u32,
@@ -37,6 +38,7 @@ struct StationEntry {
     notes: Option<String>,
     state: Option<StateProv>,
     time_zone: Option<FixedOffset>,
+    #[deprecated]
     auto_download: bool,
     number_of_files: u32,
 }
