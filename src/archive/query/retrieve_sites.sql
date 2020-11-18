@@ -3,6 +3,5 @@ SELECT
     name,
     state,
     notes,
-    tz_offset_sec,
-    auto_download
+    tz_offset_sec
 FROM sites

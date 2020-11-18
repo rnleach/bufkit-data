@@ -23,9 +23,6 @@ pub struct StationSummary {
     pub state: Option<StateProv>,
     /// The time zone offset to local standard time.
     pub time_zone: Option<FixedOffset>,
-    /// Is this site marked for automatic downloads.
-    #[deprecated]
-    pub auto_download: bool,
     /// The number of files in the archive related to this site.
     pub number_of_files: u32,
 }
@@ -38,8 +35,6 @@ struct StationEntry {
     notes: Option<String>,
     state: Option<StateProv>,
     time_zone: Option<FixedOffset>,
-    #[deprecated]
-    auto_download: bool,
     number_of_files: u32,
 }
 
@@ -69,7 +64,6 @@ impl From<StationEntry> for StationSummary {
             notes,
             state,
             time_zone,
-            auto_download,
             number_of_files,
         } = entry;
         StationSummary {
@@ -80,7 +74,6 @@ impl From<StationEntry> for StationSummary {
             notes,
             state,
             time_zone,
-            auto_download,
             number_of_files,
         }
     }
@@ -144,8 +137,7 @@ impl Archive {
                 }
             });
 
-        let auto_download: bool = row.get(7)?;
-        let number_of_files: u32 = row.get(8)?;
+        let number_of_files: u32 = row.get(7)?;
 
         Ok(StationEntry {
             station_num,
@@ -155,7 +147,6 @@ impl Archive {
             state,
             notes,
             time_zone,
-            auto_download,
             number_of_files,
         })
     }

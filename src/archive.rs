@@ -19,7 +19,7 @@ mod modify;
 pub use modify::AddFileResult;
 mod clean;
 mod query;
-pub use query::{DownloadInfo, StationSummary};
+pub use query::StationSummary;
 mod root;
 
 struct InternalSiteInfo {
@@ -159,7 +159,6 @@ mod unit {
                 notes: Some("Major air travel hub.".to_owned()),
                 state: Some(StateProv::IL),
                 time_zone: None,
-                auto_download: true,
             },
             SiteInfo {
                 station_num: StationNumber::from(2),
@@ -167,7 +166,6 @@ mod unit {
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
                 time_zone: Some(chrono::FixedOffset::west(8 * 3600)),
-                auto_download: false,
             },
             SiteInfo {
                 station_num: StationNumber::from(3),
@@ -175,7 +173,6 @@ mod unit {
                 notes: Some("In a valley.".to_owned()),
                 state: None,
                 time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
-                auto_download: true,
             },
         ]
     }

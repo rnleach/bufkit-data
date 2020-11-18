@@ -10,9 +10,6 @@ use crate::{
     site::{SiteInfo, StateProv, StationNumber},
 };
 
-#[deprecated]
-mod auto_download_info;
-pub use auto_download_info::DownloadInfo;
 mod station_summary;
 pub use station_summary::StationSummary;
 
@@ -51,15 +48,12 @@ impl Archive {
                 }
             });
 
-        let auto_download: bool = row.get(5)?;
-
         Ok(SiteInfo {
             station_num,
             name,
             notes,
             state,
             time_zone,
-            auto_download,
         })
     }
 
@@ -93,7 +87,6 @@ impl Archive {
                     sites.state, 
                     sites.notes, 
                     sites.tz_offset_sec, 
-                    sites.auto_download, 
                     temp_ids.id
                 FROM sites JOIN temp_ids ON temp_ids.station_num = sites.station_num
             ",
@@ -123,8 +116,7 @@ impl Archive {
                          name,
                          state,
                          notes,
-                         tz_offset_sec,
-                         auto_download
+                         tz_offset_sec
                     FROM sites 
                     WHERE station_num = ?1
                 ",
@@ -151,44 +143,6 @@ impl Archive {
             .collect();
 
         vals
-    }
-
-    /// Get a list of auto-download sites with the id to use to download them.
-    #[deprecated]
-    pub fn auto_downloads(&self) -> Result<Vec<DownloadInfo>, BufkitDataErr> {
-        let mut stmt = self.db_conn.prepare(
-            "
-                SELECT id, files.station_num, model, MAX(init_time)
-                FROM sites JOIN files ON sites.station_num = files.station_num
-                WHERE auto_download = 1
-                GROUP BY files.station_num, model
-            ",
-        )?;
-
-        let auto_dl_info: Vec<DownloadInfo> = stmt
-            .query_map(rusqlite::NO_PARAMS, |row| {
-                let id = row.get(0)?;
-                let stn_num = row.get::<_, u32>(1).map(StationNumber::from)?;
-                let model: String = row.get(2)?;
-                Ok((id, stn_num, model))
-            })?
-            .filter_map(|res| res.ok())
-            .filter_map(|(id, stn_num, model_str)| {
-                let model: Model = Model::from_str(&model_str).ok()?;
-                Some((id, stn_num, model))
-            })
-            .map(|(id, station_num, model)| DownloadInfo {
-                id,
-                station_num,
-                model,
-            })
-            .collect();
-
-        if auto_dl_info.is_empty() {
-            return Err(BufkitDataErr::NotInIndex);
-        }
-
-        Ok(auto_dl_info)
     }
 
     /// Retrieve a file from the archive.

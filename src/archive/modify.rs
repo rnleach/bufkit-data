@@ -113,7 +113,6 @@ impl Archive {
                     as &dyn rusqlite::types::ToSql,
                 &site.notes,
                 &site.time_zone.map(|tz| tz.local_minus_utc()),
-                &site.auto_download,
             ],
         )?;
 
@@ -132,7 +131,6 @@ impl Archive {
                     &site.name,
                     &site.notes,
                     &site.time_zone.map(|tz| tz.local_minus_utc()),
-                    &site.auto_download,
                 ],
             )
             .map_err(|err| err.into())
@@ -270,7 +268,6 @@ mod unit {
             notes: Some("Mountains, not coast.".to_owned()),
             state: Some(crate::StateProv::MT),
             time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
-            auto_download: false,
         };
 
         arch.update_site(&zootown).expect("Error updating site.");
