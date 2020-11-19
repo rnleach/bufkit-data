@@ -1,6 +1,6 @@
 [package]
 name = "bufkit-data"
-version = "0.17.1"
+version = "0.18.0"
 authors = ["Ryan <rnleach@users.noreply.github.com>"]
 description = "A crate to manage an archive of bufkit files."
 repository = "https://github.com/rnleach/bufkit-data.git"
