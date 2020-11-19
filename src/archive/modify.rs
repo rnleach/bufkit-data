@@ -9,28 +9,15 @@ use crate::{
     site::{SiteInfo, StationNumber},
 };
 
-/// The end result of adding a file to the archive.
-#[derive(Debug)]
-pub enum AddFileResult {
-    /// No site conflicts or changes. Includes the site as parsed from the file.
-    Ok(StationNumber),
-    /// This is a new site and it was added to the database as a new site.
-    New(StationNumber),
-    /// Some error occurred during processing.
-    Error(BufkitDataErr),
-    /// The site identifier provided with this file has moved to a new station number. The
-    /// correlation between station numbers has been updated.
-    IdMovedStation {
-        /// The site information before the update.
-        old: StationNumber,
-        /// The site information as it exists now.
-        new: StationNumber,
-    },
-}
 
 impl Archive {
     /// Add a bufkit file to the archive.
-    pub fn add(&self, site_id_hint: &str, model: Model, text_data: &str) -> AddFileResult {
+    pub fn add(
+        &self,
+        site_id_hint: &str,
+        model: Model,
+        text_data: &str,
+    ) -> Result<StationNumber, BufkitDataErr> {
         let site_id_hint = site_id_hint.to_uppercase();
 
         let InternalSiteInfo {
@@ -40,10 +27,7 @@ impl Archive {
             end_time,
             coords,
             elevation,
-        } = match Self::parse_site_info(text_data) {
-            Ok(val) => val,
-            Err(err) => return AddFileResult::Error(err),
-        };
+        } = Self::parse_site_info(text_data)?;
 
         let mut site_id = &site_id_hint;
         if let Some(parsed_id) = parsed_site_id.as_ref() {
@@ -54,14 +38,10 @@ impl Archive {
         let site_id = site_id;
 
         if self.site(station_num).is_none() {
-            let new_site = SiteInfo {
+            self.add_site(&SiteInfo {
                 station_num,
                 ..SiteInfo::default()
-            };
-            match self.add_site(&new_site) {
-                Ok(()) => {}
-                Err(err) => return AddFileResult::Error(err),
-            }
+            })?;
         }
 
         let file_name = self.compressed_file_name(site_id, model, init_time);
@@ -94,8 +74,8 @@ impl Archive {
                     )
                     .map_err(BufkitDataErr::Database)
             }) {
-            Ok(_) => AddFileResult::Ok(station_num),
-            Err(err) => AddFileResult::Error(err),
+            Ok(_) => Ok(station_num),
+            Err(err) => Err(err),
         }
     }
 

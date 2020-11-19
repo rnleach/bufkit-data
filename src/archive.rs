@@ -15,11 +15,12 @@ pub struct Archive {
     db_conn: rusqlite::Connection, // An sqlite connection.
 }
 
-mod modify;
-pub use modify::AddFileResult;
 mod clean;
+mod modify;
+
 mod query;
 pub use query::StationSummary;
+
 mod root;
 
 struct InternalSiteInfo {
@@ -140,12 +141,11 @@ mod unit {
     pub(super) fn fill_test_archive(arch: &mut Archive) {
         for (site, model, raw_data) in get_test_data().iter() {
             match arch.add(site, *model, raw_data) {
-                AddFileResult::Ok(_) | AddFileResult::New(_) => {}
-                AddFileResult::Error(err) => {
+                Ok(_) => {}
+                Err(err) => {
                     println!("{:?}", err);
                     panic!("Test archive error filling.");
                 }
-                _ => panic!("Test archive error filling."),
             }
         }
     }
@@ -220,7 +220,7 @@ mod unit {
             dbg!(&site);
 
             let site = match arch.add(site, *model, raw_data) {
-                AddFileResult::Ok(site) | AddFileResult::New(site) => site,
+                Ok(site) => site,
                 x => panic!("Error adding site: {:?}", x),
             };
 
