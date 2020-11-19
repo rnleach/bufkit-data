@@ -62,7 +62,7 @@ impl Archive {
 
         let statement = &format!(
             "ATTACH '{}' AS ex;",
-            db_file.to_str().ok_or(BufkitDataErr::GeneralError(
+            db_file.to_str().ok_or_else(|| BufkitDataErr::GeneralError(
                 "Unable to convert path to string".to_owned()
             ))?
         );
