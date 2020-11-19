@@ -1,6 +1,4 @@
 //! Module for errors.
-use sounding_analysis::AnalysisError;
-use sounding_bufkit::BufkitFileError;
 use std::{error::Error, fmt::Display};
 
 /// Error from the archive interface.
@@ -8,17 +6,17 @@ use std::{error::Error, fmt::Display};
 pub enum BufkitDataErr {
     // Inherited errors from sounding stack
     /// Error forwarded from sounding-analysis
-    SoundingAnalysis(AnalysisError),
+    SoundingAnalysis(sounding_analysis::AnalysisError),
     /// Error forwarded from sounding-bufkit
-    SoundingBufkit(BufkitFileError),
+    SoundingBufkit(sounding_bufkit::BufkitFileError),
 
     // Inherited errors from std
     /// Error forwarded from std
-    IO(::std::io::Error),
+    IO(std::io::Error),
 
     // Other forwarded errors
     /// Database error
-    Database(::rusqlite::Error),
+    Database(rusqlite::Error),
     /// Error forwarded from the strum crate
     StrumError(strum::ParseError),
     /// General error with any cause information erased and replaced by a string
@@ -62,26 +60,26 @@ impl Display for BufkitDataErr {
 
 impl Error for BufkitDataErr {}
 
-impl From<BufkitFileError> for BufkitDataErr {
-    fn from(err: BufkitFileError) -> BufkitDataErr {
+impl From<sounding_bufkit::BufkitFileError> for BufkitDataErr {
+    fn from(err: sounding_bufkit::BufkitFileError) -> BufkitDataErr {
         BufkitDataErr::SoundingBufkit(err)
     }
 }
 
-impl From<AnalysisError> for BufkitDataErr {
-    fn from(err: AnalysisError) -> BufkitDataErr {
+impl From<sounding_analysis::AnalysisError> for BufkitDataErr {
+    fn from(err: sounding_analysis::AnalysisError) -> BufkitDataErr {
         BufkitDataErr::SoundingAnalysis(err)
     }
 }
 
-impl From<::std::io::Error> for BufkitDataErr {
-    fn from(err: ::std::io::Error) -> BufkitDataErr {
+impl From<std::io::Error> for BufkitDataErr {
+    fn from(err: std::io::Error) -> BufkitDataErr {
         BufkitDataErr::IO(err)
     }
 }
 
-impl From<::rusqlite::Error> for BufkitDataErr {
-    fn from(err: ::rusqlite::Error) -> BufkitDataErr {
+impl From<rusqlite::Error> for BufkitDataErr {
+    fn from(err: rusqlite::Error) -> BufkitDataErr {
         BufkitDataErr::Database(err)
     }
 }
