@@ -1,26 +1,17 @@
 //! The cleaning method for Archive is complex, so it has its own module.
 
+use crate::{archive::Archive, errors::BufkitDataErr};
+use metfor::Quantity;
 use std::{collections::HashSet, io::Read, str::FromStr};
 
-use crate::{
-    coords::Coords,
-    errors::BufkitDataErr,
-    models::Model,
-    site::{SiteInfo, StationNumber},
-};
-
-use metfor::{Meters, Quantity};
-
-use super::{Archive, InternalSiteInfo};
-
 struct CleanMethodInternalSiteInfo {
-    station_num: StationNumber,
-    model: Model,
+    station_num: crate::site::StationNumber,
+    model: crate::models::Model,
     id: Option<String>,
     init_time: chrono::NaiveDateTime,
     end_time: chrono::NaiveDateTime,
-    coords: Coords,
-    elevation: Meters,
+    coords: crate::coords::Coords,
+    elevation: metfor::Meters,
 }
 
 impl Archive {
@@ -135,9 +126,9 @@ impl Archive {
             }) = arch.extract_site_info_from_file(&extra_file)
             {
                 if arch.site(station_num).is_none() {
-                    let site = SiteInfo {
+                    let site = crate::site::SiteInfo {
                         station_num,
-                        ..SiteInfo::default()
+                        ..crate::site::SiteInfo::default()
                     };
 
                     arch.add_site(&site)?;
@@ -183,14 +174,14 @@ impl Archive {
             return None;
         }
 
-        let model = Model::from_str(tokens[1]).ok()?;
+        let model = crate::models::Model::from_str(tokens[1]).ok()?;
 
         let file = std::fs::File::open(self.data_root().join(fname)).ok()?;
         let mut decoder = flate2::read::GzDecoder::new(file);
         let mut s = String::new();
         decoder.read_to_string(&mut s).ok()?;
 
-        let InternalSiteInfo {
+        let crate::archive::InternalSiteInfo {
             station_num,
             id: parsed_site_id,
             init_time,
