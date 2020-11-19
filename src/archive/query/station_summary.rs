@@ -8,6 +8,7 @@ use chrono::FixedOffset;
 use std::{collections::HashMap, str::FromStr};
 
 /// A summary of the information about a station.
+#[derive(Debug)]
 pub struct StationSummary {
     /// Station number
     pub station_num: StationNumber,
@@ -149,5 +150,41 @@ impl Archive {
             time_zone,
             number_of_files,
         })
+    }
+}
+
+#[cfg(test)]
+mod unit {
+    use crate::archive::unit::*; // test helpers.
+    use crate::{Model, StationNumber};
+
+    #[test]
+    fn test_summaries() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        let sums = arch.station_summaries().unwrap();
+
+        for sum in sums {
+            println!("{:?}", sum);
+
+            assert_eq!(sum.ids.len(), 1);
+            assert_eq!(sum.ids[0], "KMSO");
+
+            assert_eq!(sum.models.len(), 2);
+            assert!(sum.models.contains(&Model::GFS));
+            assert!(sum.models.contains(&Model::NAM));
+
+            assert_eq!(sum.station_num, StationNumber::new(727730));
+            assert_eq!(sum.number_of_files, 6);
+            assert!(sum.name.is_none());
+            assert!(sum.notes.is_none());
+            assert!(sum.time_zone.is_none());
+            assert!(sum.state.is_none());
+        }
     }
 }

@@ -510,6 +510,35 @@ mod unit {
     use chrono::NaiveDate;
 
     #[test]
+    fn test_sites_and_ids_for() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        let test_sites = &get_test_sites();
+
+        for site in test_sites {
+            arch.add_site(site).expect("Error adding site.");
+        }
+
+        fill_test_archive(&mut arch);
+
+        let sites_and_ids = arch
+            .sites_and_ids_for(Model::GFS)
+            .expect("error getting sites & ids");
+        println!("There are {} entries in the variable.", sites_and_ids.len());
+        for (site, id) in &sites_and_ids {
+            println!("{:?} - {}", site, id);
+            if site.station_num == StationNumber::from(727730) {
+                assert_eq!(&id, &"KMSO");
+            } else {
+                panic!("Test data must have changed, not recognized.");
+            }
+        }
+    }
+
+    #[test]
     fn test_site_info() {
         let TestArchive { tmp: _tmp, arch } =
             create_test_archive().expect("Failed to create test archive.");

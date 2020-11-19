@@ -216,3 +216,20 @@ impl Archive {
         })
     }
 }
+
+#[cfg(test)]
+mod unit {
+    use crate::archive::unit::*; // test helpers.
+
+    #[test]
+    fn test_clean() {
+        let TestArchive {
+            tmp: _tmp,
+            mut arch,
+        } = create_test_archive().expect("Failed to create test archive.");
+
+        fill_test_archive(&mut arch);
+
+        arch.clean().unwrap();
+    }
+}
