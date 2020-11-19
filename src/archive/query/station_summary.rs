@@ -1,4 +1,3 @@
-use super::Archive;
 use crate::{
     errors::BufkitDataErr,
     models::Model,
@@ -80,7 +79,7 @@ impl From<StationEntry> for StationSummary {
     }
 }
 
-impl Archive {
+impl crate::Archive {
     /// Get a summary of all the stations in the archive.
     pub fn station_summaries(&self) -> Result<Vec<StationSummary>, BufkitDataErr> {
         let mut vals: HashMap<StationNumber, StationSummary> = HashMap::new();

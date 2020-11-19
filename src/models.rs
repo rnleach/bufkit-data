@@ -1,6 +1,5 @@
 //! Models potentially stored in the archive.
 
-use chrono::{Duration, NaiveDateTime};
 use std::fmt;
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
@@ -64,31 +63,33 @@ impl Model {
     /// Create an iterator of all the model runs between two times
     pub fn all_runs(
         self,
-        start: &NaiveDateTime,
-        end: &NaiveDateTime,
-    ) -> impl Iterator<Item = NaiveDateTime> {
+        start: &chrono::NaiveDateTime,
+        end: &chrono::NaiveDateTime,
+    ) -> impl Iterator<Item = chrono::NaiveDateTime> {
         let delta_t = self.hours_between_runs();
 
         // Find a good start time that corresponds with an actual model run time.
         let round_start = if *start < *end {
-            let mut strt = start.date().and_hms(0, 0, 0) + Duration::hours(self.base_hour());
+            let mut strt =
+                start.date().and_hms(0, 0, 0) + chrono::Duration::hours(self.base_hour());
             // Make sure we didn't jump ahead into the future.
             while strt > *start {
-                strt -= Duration::hours(self.hours_between_runs());
+                strt -= chrono::Duration::hours(self.hours_between_runs());
             }
             // Make sure we didn't jumb too far back.
             while strt < *start {
-                strt += Duration::hours(self.hours_between_runs());
+                strt += chrono::Duration::hours(self.hours_between_runs());
             }
 
             strt
         } else {
-            let mut strt = start.date().and_hms(0, 0, 0) + Duration::hours(self.base_hour());
+            let mut strt =
+                start.date().and_hms(0, 0, 0) + chrono::Duration::hours(self.base_hour());
             while strt < *start {
-                strt += Duration::hours(self.hours_between_runs());
+                strt += chrono::Duration::hours(self.hours_between_runs());
             }
             while strt > *start {
-                strt -= Duration::hours(self.hours_between_runs());
+                strt -= chrono::Duration::hours(self.hours_between_runs());
             }
 
             strt
@@ -97,7 +98,7 @@ impl Model {
         let steps: i64 = (*end - round_start).num_hours() / self.hours_between_runs();
 
         (0..=steps.abs())
-            .map(move |step| round_start + Duration::hours(steps.signum() * step * delta_t))
+            .map(move |step| round_start + chrono::Duration::hours(steps.signum() * step * delta_t))
     }
 
     /// Get a static str representation

@@ -345,8 +345,6 @@ impl crate::Archive {
     ) -> Result<Option<String>, BufkitDataErr> {
         let station_num_raw: u32 = Into::<u32>::into(station_num);
 
-        // FIXME: Query station number with this, then if it doesn't match the one we asked for
-        // return None.
         let mut stmt = self.db_conn.prepare(
             "
                 SELECT id, init_time 

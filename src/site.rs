@@ -1,4 +1,3 @@
-use chrono::FixedOffset;
 #[cfg(feature = "pylib")]
 use pyo3::prelude::*;
 use std::fmt::Display;
@@ -23,7 +22,7 @@ pub struct SiteInfo {
     /// state or providence they are in.
     pub state: Option<StateProv>,
     /// Time zone information
-    pub time_zone: Option<FixedOffset>,
+    pub time_zone: Option<chrono::FixedOffset>,
 }
 
 impl SiteInfo {
@@ -117,7 +116,7 @@ mod unit {
             name: Some("tv station".to_owned()),
             state: Some(StateProv::VI),
             notes: Some("".to_owned()),
-            time_zone: Some(FixedOffset::west(7 * 3600)),
+            time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
         };
 
         let incomplete_site = SiteInfo {

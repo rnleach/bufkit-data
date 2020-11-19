@@ -15,5 +15,3 @@ impl From<(f64, f64)> for Coords {
         }
     }
 }
-
-impl Coords {}
