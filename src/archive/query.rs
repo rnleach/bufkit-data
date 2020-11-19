@@ -1,8 +1,5 @@
-use chrono::NaiveDateTime;
 use rusqlite::OptionalExtension;
 use std::{collections::HashSet, io::Read, iter::FromIterator, str::FromStr};
-
-use super::Archive;
 
 use crate::{
     errors::BufkitDataErr,
@@ -13,7 +10,7 @@ use crate::{
 mod station_summary;
 pub use station_summary::StationSummary;
 
-impl Archive {
+impl crate::Archive {
     /// Retrieve a list of sites in the archive.
     pub fn sites(&self) -> Result<Vec<SiteInfo>, BufkitDataErr> {
         let mut stmt = self
@@ -272,7 +269,7 @@ impl Archive {
         &self,
         site: StationNumber,
         model: Model,
-        init_time: NaiveDateTime,
+        init_time: chrono::NaiveDateTime,
     ) -> Result<bool, BufkitDataErr> {
         let num_records: i32 = self.db_conn.query_row(
             "SELECT COUNT(*) FROM files WHERE station_num = ?1 AND model = ?2 AND init_time = ?3",
@@ -388,7 +385,7 @@ impl Archive {
         &self,
         station_num: StationNumber,
         model: Model,
-    ) -> Result<Vec<NaiveDateTime>, BufkitDataErr> {
+    ) -> Result<Vec<chrono::NaiveDateTime>, BufkitDataErr> {
         let station_num: u32 = Into::<u32>::into(station_num);
 
         let mut stmt = self.db_conn.prepare(
@@ -400,7 +397,7 @@ impl Archive {
             ",
         )?;
 
-        let inv: Result<Vec<NaiveDateTime>, _> = stmt
+        let inv: Result<Vec<chrono::NaiveDateTime>, _> = stmt
             .query_map(
                 &[
                     &station_num as &dyn rusqlite::types::ToSql,
@@ -421,8 +418,8 @@ impl Archive {
         &self,
         station_num: StationNumber,
         model: Model,
-        time_range: Option<(NaiveDateTime, NaiveDateTime)>,
-    ) -> Result<Vec<NaiveDateTime>, BufkitDataErr> {
+        time_range: Option<(chrono::NaiveDateTime, chrono::NaiveDateTime)>,
+    ) -> Result<Vec<chrono::NaiveDateTime>, BufkitDataErr> {
         let (start, end) = if let Some((start, end)) = time_range {
             (start, end)
         } else {
@@ -430,7 +427,7 @@ impl Archive {
         };
 
         let inv = self.inventory(station_num, model)?;
-        let inv: HashSet<NaiveDateTime> = HashSet::from_iter(inv.into_iter());
+        let inv: HashSet<chrono::NaiveDateTime> = HashSet::from_iter(inv.into_iter());
 
         let mut to_ret = vec![];
         for curr_time in model.all_runs(&start, &end) {
@@ -465,7 +462,7 @@ impl Archive {
         &self,
         station_num: StationNumber,
         model: Model,
-    ) -> Result<(NaiveDateTime, NaiveDateTime), BufkitDataErr> {
+    ) -> Result<(chrono::NaiveDateTime, chrono::NaiveDateTime), BufkitDataErr> {
         let station_num: u32 = Into::<u32>::into(station_num);
 
         let start = self.db_conn.query_row(
