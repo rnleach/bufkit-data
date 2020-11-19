@@ -1,15 +1,12 @@
-use super::Archive;
-use crate::{errors::BufkitDataErr, models::Model, site::StationNumber};
-use chrono::NaiveDateTime;
+use crate::{errors::BufkitDataErr, models::Model, site::StationNumber, Archive};
 use rusqlite::ToSql;
-use std::path::{Path, PathBuf};
 
 impl Archive {
     const DATA_DIR: &'static str = "data";
     const DB_FILE: &'static str = "index.db";
 
     /// Initialize a new archive.
-    pub fn create(root: &dyn AsRef<Path>) -> Result<Self, BufkitDataErr> {
+    pub fn create(root: &dyn AsRef<std::path::Path>) -> Result<Self, BufkitDataErr> {
         let data_root = root.as_ref().join(Archive::DATA_DIR);
         let db_file = root.as_ref().join(Archive::DB_FILE);
         let root = root.as_ref().to_path_buf();
@@ -28,7 +25,7 @@ impl Archive {
     }
 
     /// Open an existing archive.
-    pub fn connect(root: &dyn AsRef<Path>) -> Result<Self, BufkitDataErr> {
+    pub fn connect(root: &dyn AsRef<std::path::Path>) -> Result<Self, BufkitDataErr> {
         let db_file = root.as_ref().join(Archive::DB_FILE);
         let root = root.as_ref().to_path_buf();
 
@@ -42,12 +39,12 @@ impl Archive {
     }
 
     /// Retrieve a path to the root. Allows caller to store files in the archive.
-    pub fn root(&self) -> &Path {
+    pub fn root(&self) -> &std::path::Path {
         &self.root
     }
 
     /// Get the directory the data files are stored in.
-    pub(crate) fn data_root(&self) -> PathBuf {
+    pub(crate) fn data_root(&self) -> std::path::PathBuf {
         self.root.join(Archive::DATA_DIR)
     }
 
@@ -56,9 +53,9 @@ impl Archive {
         &self,
         stations: &[StationNumber],
         models: &[Model],
-        start: NaiveDateTime,
-        end: NaiveDateTime,
-        dest: &Path,
+        start: chrono::NaiveDateTime,
+        end: chrono::NaiveDateTime,
+        dest: &std::path::Path,
     ) -> Result<(), BufkitDataErr> {
         let new_db = Self::create(&dest)?;
         let db_file = new_db.root.join(Archive::DB_FILE);

@@ -1,16 +1,13 @@
 use metfor::Quantity;
 use std::io::Write;
 
-use super::{Archive, InternalSiteInfo};
-
 use crate::{
     errors::BufkitDataErr,
     models::Model,
     site::{SiteInfo, StationNumber},
 };
 
-
-impl Archive {
+impl crate::Archive {
     /// Add a bufkit file to the archive.
     pub fn add(
         &self,
@@ -20,7 +17,7 @@ impl Archive {
     ) -> Result<StationNumber, BufkitDataErr> {
         let site_id_hint = site_id_hint.to_uppercase();
 
-        let InternalSiteInfo {
+        let super::InternalSiteInfo {
             station_num,
             id: parsed_site_id,
             init_time,

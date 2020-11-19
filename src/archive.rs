@@ -2,16 +2,16 @@
 
 use crate::{coords::Coords, errors::BufkitDataErr, site::StationNumber};
 
-use chrono::NaiveDateTime;
 #[cfg(feature = "pylib")]
 use pyo3::prelude::*;
-use std::{convert::TryFrom, path::PathBuf};
+
+use std::convert::TryFrom;
 
 /// The archive.
 #[cfg_attr(feature = "pylib", pyclass(module = "bufkit_data"))]
 #[derive(Debug)]
 pub struct Archive {
-    root: PathBuf,                 // The root directory.
+    root: std::path::PathBuf,      // The root directory.
     db_conn: rusqlite::Connection, // An sqlite connection.
 }
 
@@ -40,8 +40,10 @@ impl Archive {
         let first = iter.next().ok_or(BufkitDataErr::NotEnoughData)?.0;
         let last = iter.last().ok_or(BufkitDataErr::NotEnoughData)?.0;
 
-        let init_time: NaiveDateTime = first.valid_time().ok_or(BufkitDataErr::MissingValidTime)?;
-        let end_time: NaiveDateTime = last.valid_time().ok_or(BufkitDataErr::MissingValidTime)?;
+        let init_time: chrono::NaiveDateTime =
+            first.valid_time().ok_or(BufkitDataErr::MissingValidTime)?;
+        let end_time: chrono::NaiveDateTime =
+            last.valid_time().ok_or(BufkitDataErr::MissingValidTime)?;
         let coords: Coords = first
             .station_info()
             .location()
