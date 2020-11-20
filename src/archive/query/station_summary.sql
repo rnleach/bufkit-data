@@ -6,6 +6,6 @@ SELECT
 	sites.state, 
 	sites.notes, 
 	sites.tz_offset_sec, 
-	COUNT(*)
-FROM files JOIN sites ON files.station_num = sites.station_num
-GROUP BY files.station_num, id, model
+	COUNT(files.station_num)
+FROM sites LEFT JOIN files ON files.station_num = sites.station_num
+GROUP BY sites.station_num, id, model

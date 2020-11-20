@@ -29,8 +29,8 @@ pub struct StationSummary {
 
 struct StationEntry {
     station_num: StationNumber,
-    id: String,
-    model: Model,
+    id: Option<String>,
+    model: Option<Model>,
     name: Option<String>,
     notes: Option<String>,
     state: Option<StateProv>,
@@ -66,10 +66,21 @@ impl From<StationEntry> for StationSummary {
             time_zone,
             number_of_files,
         } = entry;
+
+        let mut models = vec![];
+        if let Some(model) = model {
+            models.push(model);
+        }
+
+        let mut ids = vec![];
+        if let Some(id) = id {
+            ids.push(id);
+        }
+
         StationSummary {
             station_num,
-            ids: vec![id],
-            models: vec![model],
+            ids,
+            models,
             name,
             notes,
             state,
@@ -90,8 +101,14 @@ impl crate::Archive {
             .for_each(|stn_entry| {
                 if let Ok(stn_entry) = stn_entry {
                     if let Some(summary) = vals.get_mut(&stn_entry.station_num) {
-                        summary.ids.push(stn_entry.id);
-                        summary.models.push(stn_entry.model);
+                        if let Some(id) = stn_entry.id {
+                            summary.ids.push(id);
+                        }
+
+                        if let Some(model) = stn_entry.model {
+                            summary.models.push(model);
+                        }
+
                         summary.number_of_files += stn_entry.number_of_files;
                     } else {
                         vals.insert(stn_entry.station_num, StationSummary::from(stn_entry));
@@ -113,10 +130,12 @@ impl crate::Archive {
 
     fn parse_row_to_entry(row: &rusqlite::Row) -> Result<StationEntry, rusqlite::Error> {
         let station_num: StationNumber = row.get::<_, u32>(0).map(StationNumber::from)?;
-        let id: String = row.get(1)?;
+        let id: Option<String> = row.get(1)?;
 
-        let model: Model = row.get::<_, String>(2).and_then(|a_string| {
-            Model::from_str(&a_string).map_err(|_| rusqlite::Error::InvalidQuery)
+        let model: Option<Model> = row.get::<_, Option<String>>(2).and_then(|string_opt| {
+            string_opt
+                .map(|string| Model::from_str(&string).map_err(|_| rusqlite::Error::InvalidQuery))
+                .transpose()
         })?;
 
         let name: Option<String> = row.get(3)?;
