@@ -44,6 +44,8 @@ impl crate::Archive {
         let file_name = self.compressed_file_name(site_id, model, init_time);
         let site_id = Some(site_id);
 
+        Self::check_for_known_archive_errors(station_num, &site_id_hint, parsed_site_id.as_ref(), init_time)?;
+
         match std::fs::File::create(self.data_root().join(&file_name))
             .map_err(BufkitDataErr::IO)
             .and_then(|file| {
@@ -199,6 +201,25 @@ impl crate::Archive {
             model.as_static_str(),
             station_id,
         )
+    }
+
+    fn check_for_known_archive_errors(
+        _station_num: StationNumber,
+        _site_id_hint: &str,
+        _parsed_site_id: Option<&String>,
+        init_time: chrono::NaiveDateTime,
+    ) -> Result<(), BufkitDataErr> {
+        // There was a period where a bug in the date portion of the software that caused a 
+        // bunch of data in December 2020 to be parsed as 1/1/21 00Z init times. This is the NOAA
+        // software that produces the bufkit files and there is nothing I can do to fix it, those
+        // files are effectively corrupted.
+        let invalid_init_time_2021: chrono::NaiveDateTime = chrono::NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0);
+
+        if init_time == invalid_init_time_2021 {
+            return Err(BufkitDataErr::KnownArchiveError("2020 to 2021 datetime error"))
+        }
+
+        Ok(())
     }
 }
 

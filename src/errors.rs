@@ -31,6 +31,8 @@ pub enum BufkitDataErr {
     MissingValidTime,
     /// Missing station information.
     MissingStationData,
+    /// An error that is known and hard coded into the library.
+    KnownArchiveError(&'static str),
     /// There was an internal logic error.
     LogicError(&'static str),
 }
@@ -53,6 +55,7 @@ impl Display for BufkitDataErr {
             NotEnoughData => write!(f, "not enough data to complete task"),
             MissingValidTime => write!(f, "sounding missing a valid time"),
             MissingStationData => write!(f, "not enough information about the station"),
+            KnownArchiveError(msg) => write!(f, "Known error: {}", msg),
             LogicError(msg) => write!(f, "internal logic error: {}", msg),
         }
     }
