@@ -12,13 +12,15 @@ impl crate::Archive {
     pub fn add(
         &self,
         site_id_hint: &str,
+        stn_num_hint: Option<StationNumber>,
+        init_time_hint: Option<chrono::NaiveDateTime>,
         model: Model,
         text_data: &str,
     ) -> Result<StationNumber, BufkitDataErr> {
         let site_id_hint = site_id_hint.to_uppercase();
 
         let super::InternalSiteInfo {
-            station_num,
+            station_num: parsed_station_num,
             id: parsed_site_id,
             init_time,
             end_time,
@@ -26,17 +28,33 @@ impl crate::Archive {
             elevation,
         } = Self::parse_site_info(text_data)?;
 
+        if let Some(init_time_hint) = init_time_hint {
+            if init_time_hint != init_time {
+                return Err(BufkitDataErr::MismatchedInitializationTimes {
+                    hint: init_time_hint,
+                    parsed: init_time,
+                });
+            }
+        }
+
+        //
+        // FIXME: We shouldn't do this, it's an error. The error check below should go here and
+        // return early. However, it is known that there are several "good" files on the archive 
+        // server where the site id in the URL doesn't match the one in the file. KLDN == KDLN for 
+        // some models!
+        //
         let mut site_id = &site_id_hint;
         if let Some(parsed_id) = parsed_site_id.as_ref() {
             if parsed_id != &site_id_hint {
-                site_id = parsed_id
+                site_id = parsed_id;
             }
         }
         let site_id = site_id;
 
-        if self.site(station_num).is_none() {
+        // This is a new station!
+        if self.site(parsed_station_num).is_none() {
             self.add_site(&SiteInfo {
-                station_num,
+                station_num: parsed_station_num,
                 ..SiteInfo::default()
             })?;
         }
@@ -44,9 +62,7 @@ impl crate::Archive {
         let file_name = self.compressed_file_name(site_id, model, init_time);
         let site_id = Some(site_id);
 
-        Self::check_for_known_archive_errors(station_num, &site_id_hint, parsed_site_id.as_ref(), init_time)?;
-
-        match std::fs::File::create(self.data_root().join(&file_name))
+        let added_station_num = match std::fs::File::create(self.data_root().join(&file_name))
             .map_err(BufkitDataErr::IO)
             .and_then(|file| {
                 let mut encoder =
@@ -60,7 +76,7 @@ impl crate::Archive {
                     .execute(
                         include_str!("modify/add_file.sql"),
                         &[
-                            &Into::<u32>::into(station_num) as &dyn rusqlite::types::ToSql,
+                            &Into::<u32>::into(parsed_station_num) as &dyn rusqlite::types::ToSql,
                             &model.as_static_str() as &dyn rusqlite::types::ToSql,
                             &init_time as &dyn rusqlite::types::ToSql,
                             &end_time,
@@ -73,9 +89,29 @@ impl crate::Archive {
                     )
                     .map_err(BufkitDataErr::Database)
             }) {
-            Ok(_) => Ok(station_num),
-            Err(err) => Err(err),
+            Ok(_) => parsed_station_num,
+            Err(err) => return Err(err),
+        };
+
+        if let Some(parsed_id) = parsed_site_id {
+            if parsed_id != site_id_hint {
+                return Err(BufkitDataErr::MismatchedIDs {
+                    hint: site_id_hint,
+                    parsed: parsed_id,
+                });
+            }
         }
+
+        if let Some(stn_num_hint) = stn_num_hint {
+            if stn_num_hint != parsed_station_num {
+                return Err(BufkitDataErr::MismatchedStationNumbers {
+                    hint: stn_num_hint,
+                    parsed: parsed_station_num,
+                });
+            }
+        }
+
+        Ok(added_station_num)
     }
 
     /// Add a site to the list of sites.
@@ -201,25 +237,6 @@ impl crate::Archive {
             model.as_static_str(),
             station_id,
         )
-    }
-
-    fn check_for_known_archive_errors(
-        _station_num: StationNumber,
-        _site_id_hint: &str,
-        _parsed_site_id: Option<&String>,
-        init_time: chrono::NaiveDateTime,
-    ) -> Result<(), BufkitDataErr> {
-        // There was a period where a bug in the date portion of the software that caused a 
-        // bunch of data in December 2020 to be parsed as 1/1/21 00Z init times. This is the NOAA
-        // software that produces the bufkit files and there is nothing I can do to fix it, those
-        // files are effectively corrupted.
-        let invalid_init_time_2021: chrono::NaiveDateTime = chrono::NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0);
-
-        if init_time == invalid_init_time_2021 {
-            return Err(BufkitDataErr::KnownArchiveError("2020 to 2021 datetime error"))
-        }
-
-        Ok(())
     }
 }
 

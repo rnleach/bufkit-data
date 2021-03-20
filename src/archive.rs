@@ -142,7 +142,7 @@ mod unit {
     // Function to fill the archive with some example data.
     pub(super) fn fill_test_archive(arch: &mut Archive) {
         for (site, model, raw_data) in get_test_data().iter() {
-            match arch.add(site, *model, raw_data) {
+            match arch.add(site, None, None, *model, raw_data) {
                 Ok(_) => {}
                 Err(err) => {
                     println!("{:?}", err);
@@ -221,7 +221,7 @@ mod unit {
             dbg!(init_time);
             dbg!(&site);
 
-            let site = match arch.add(site, *model, raw_data) {
+            let site = match arch.add(site, None, None, *model, raw_data) {
                 Ok(site) => site,
                 x => panic!("Error adding site: {:?}", x),
             };

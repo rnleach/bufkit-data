@@ -35,6 +35,27 @@ pub enum BufkitDataErr {
     KnownArchiveError(&'static str),
     /// There was an internal logic error.
     LogicError(&'static str),
+    /// The site id didn't match the hint when adding.
+    MismatchedIDs {
+        /// The ID that was provided as a hint.
+        hint: String,
+        /// The ID that was parsed from the file.
+        parsed: String,
+    },
+    /// The station numbers didn't match.
+    MismatchedStationNumbers {
+        /// The StationNumber number with the original request.
+        hint: crate::StationNumber,
+        /// The StationNumber parsed from the file.
+        parsed: crate::StationNumber,
+    },
+    /// Parsed and expected initialization times didn't match.
+    MismatchedInitializationTimes {
+        /// The initialization time that was expected.
+        hint: chrono::NaiveDateTime,
+        /// The inizialization time that was parsed from the file.
+        parsed: chrono::NaiveDateTime,
+    },
 }
 
 impl Display for BufkitDataErr {
@@ -57,6 +78,11 @@ impl Display for BufkitDataErr {
             MissingStationData => write!(f, "not enough information about the station"),
             KnownArchiveError(msg) => write!(f, "Known error: {}", msg),
             LogicError(msg) => write!(f, "internal logic error: {}", msg),
+            MismatchedIDs { hint, parsed } => {
+                write!(f, "mismatched ids parsed: {} != hint:{}", parsed, hint)
+            }
+            MismatchedStationNumbers { .. } => write!(f, "mismatched station numbers"),
+            MismatchedInitializationTimes { .. } => write!(f, "mismatched initialization times"),
         }
     }
 }
