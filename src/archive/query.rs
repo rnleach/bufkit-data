@@ -18,7 +18,7 @@ impl crate::Archive {
             .prepare(include_str!("query/retrieve_sites.sql"))?;
 
         let vals: Result<Vec<SiteInfo>, BufkitDataErr> = stmt
-            .query_and_then(rusqlite::NO_PARAMS, Self::parse_row_to_site)?
+            .query_and_then([], Self::parse_row_to_site)?
             .map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
 
@@ -60,7 +60,7 @@ impl crate::Archive {
         model: Model,
     ) -> Result<Vec<(SiteInfo, String)>, BufkitDataErr> {
         self.db_conn
-            .execute("DROP TABLE IF EXISTS temp_ids", rusqlite::NO_PARAMS)?;
+            .execute("DROP TABLE IF EXISTS temp_ids", [])?;
         self.db_conn.execute(
             "
                 CREATE TEMP TABLE temp_ids AS
@@ -96,7 +96,7 @@ impl crate::Archive {
         };
 
         let vals: Result<Vec<(SiteInfo, String)>, BufkitDataErr> = stmt
-            .query_and_then(rusqlite::NO_PARAMS, parse_row)?
+            .query_and_then([], parse_row)?
             .map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
 

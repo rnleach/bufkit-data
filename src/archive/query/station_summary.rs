@@ -97,7 +97,7 @@ impl crate::Archive {
 
         let mut stmt = self.db_conn.prepare(include_str!("station_summary.sql"))?;
 
-        stmt.query_and_then(rusqlite::NO_PARAMS, Self::parse_row_to_entry)?
+        stmt.query_and_then([], Self::parse_row_to_entry)?
             .for_each(|stn_entry| {
                 if let Ok(stn_entry) = stn_entry {
                     if let Some(summary) = vals.get_mut(&stn_entry.station_num) {

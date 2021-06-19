@@ -21,7 +21,7 @@ impl Archive {
         let arch = Archive::connect(&self.root)?;
 
         arch.db_conn
-            .execute("PRAGMA cache_size=10000", rusqlite::NO_PARAMS)?;
+            .execute("PRAGMA cache_size=10000", [])?;
 
         println!("Building set of files from the index.");
         let index_vals = self.get_all_files_from_index(&arch)?;
@@ -38,7 +38,7 @@ impl Archive {
         self.handle_files_in_archive_but_not_index(&arch, &mut files_not_in_index)?;
 
         println!("Compressing index.");
-        arch.db_conn.execute("VACUUM", rusqlite::NO_PARAMS)?;
+        arch.db_conn.execute("VACUUM", [])?;
 
         Ok(())
     }
@@ -48,7 +48,7 @@ impl Archive {
         let mut all_files_stmt = arch.db_conn.prepare("SELECT file_name FROM files")?;
 
         let index_vals: Result<HashSet<String>, BufkitDataErr> = all_files_stmt
-            .query_map(rusqlite::NO_PARAMS, |row| row.get::<_, String>(0))?
+            .query_map([], |row| row.get::<_, String>(0))?
             .map(|res| res.map_err(BufkitDataErr::Database))
             .collect();
 
@@ -77,14 +77,14 @@ impl Archive {
             .prepare("DELETE FROM files WHERE file_name = ?1")?;
 
         arch.db_conn
-            .execute("BEGIN TRANSACTION", rusqlite::NO_PARAMS)?;
+            .execute("BEGIN TRANSACTION", [])?;
 
         for missing_file in files_in_index_but_not_on_file_system {
             del_stmt.execute(&[missing_file])?;
             println!("Removing {} from index.", missing_file);
         }
         arch.db_conn
-            .execute("COMMIT TRANSACTION", rusqlite::NO_PARAMS)?;
+            .execute("COMMIT TRANSACTION", [])?;
 
         Ok(())
     }
@@ -113,7 +113,7 @@ impl Archive {
         )?;
 
         arch.db_conn
-            .execute("BEGIN TRANSACTION", rusqlite::NO_PARAMS)?;
+            .execute("BEGIN TRANSACTION", [])?;
         for extra_file in files_not_in_index {
             let message = if let Some(CleanMethodInternalSiteInfo {
                 station_num,
@@ -162,7 +162,7 @@ impl Archive {
             println!("{}", message);
         }
         arch.db_conn
-            .execute("COMMIT TRANSACTION", rusqlite::NO_PARAMS)?;
+            .execute("COMMIT TRANSACTION", [])?;
 
         Ok(())
     }

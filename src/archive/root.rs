@@ -66,7 +66,7 @@ impl Archive {
                 "Unable to convert path to string".to_owned()
             ))?
         );
-        self.db_conn.execute(statement, rusqlite::NO_PARAMS)?;
+        self.db_conn.execute(statement, [])?;
 
         let mut sites_stmt = self.db_conn.prepare(
             "
@@ -97,7 +97,7 @@ impl Archive {
 
         for &stn in stations {
             let stn_num: u32 = stn.into();
-            sites_stmt.execute(&[stn_num])?;
+            sites_stmt.execute([stn_num])?;
 
             for &model in models {
                 files_stmt.execute(&[

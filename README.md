@@ -42,7 +42,4 @@ ord = arch.id_to_station_num("kord", "gfs")
 old_ord_gfs = arch.retrieve_sounding(ord, "gfs", valid_time)
 
 ```
-
-Current version: 0.18.0
-
 License: MIT

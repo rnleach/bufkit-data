@@ -209,7 +209,7 @@ impl crate::Archive {
             .map(|res| {
                 res.and_then(|fname| {
                     dstmt
-                        .execute(&[fname])
+                        .execute([fname])
                         .map_err(BufkitDataErr::Database)
                         .map(|_num_rows_affected| ())
                 })
