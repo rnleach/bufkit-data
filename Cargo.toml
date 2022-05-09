@@ -22,7 +22,7 @@ pylib = ["pyo3"]
 chrono = "^0.4"
 flate2 = {version = "1.0", features = ["rust_backend"], default-features = false }
 metfor = "^0.9.0"
-rusqlite = { version = "0.25", features = ["bundled", "chrono"], default-features = false }
+rusqlite = { version = "0.27", features = ["bundled", "chrono"], default-features = false }
 sounding-analysis = "^0.17"
 sounding-bufkit = "0.16"
 strum = "0.24"
