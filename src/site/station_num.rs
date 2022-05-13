@@ -48,6 +48,11 @@ impl StationNumber {
 #[cfg(feature = "pylib")]
 #[cfg_attr(feature = "pylib", pymethods)]
 impl StationNumber {
+
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("bufkit_data::StationNumber({})", self.num))
+    }
+
     #[new]
     fn py_new(num: u32) -> Self {
         Self::new(num)
@@ -59,10 +64,3 @@ impl StationNumber {
     }
 }
 
-#[cfg(feature = "pylib")]
-#[cfg_attr(feature = "pylib", pyproto)]
-impl pyo3::PyObjectProtocol<'_> for StationNumber {
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("bufkit_data::StationNumber({})", self.num))
-    }
-}

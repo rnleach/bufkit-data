@@ -27,7 +27,7 @@ sounding-analysis = "^0.17"
 sounding-bufkit = "0.16"
 strum = "0.24"
 strum_macros = "0.24"
-pyo3 = {version = "^0.13", features = ["extension-module"], optional = true}
+pyo3 = {version = "^0.16.4", features = ["extension-module"], optional = true}
 
 [dev-dependencies]
 tempdir = "0.3"

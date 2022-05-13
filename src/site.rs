@@ -83,6 +83,11 @@ impl Default for SiteInfo {
 #[cfg(feature = "pylib")]
 #[cfg_attr(feature = "pylib", pymethods)]
 impl SiteInfo {
+
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(self.description())
+    }
+
     #[getter]
     fn get_station_num(&self) -> StationNumber {
         self.station_num
@@ -91,14 +96,6 @@ impl SiteInfo {
     #[getter]
     fn get_station_name(&self) -> String {
         self.name.clone().unwrap_or_else(|| "No Name".to_owned())
-    }
-}
-
-#[cfg(feature = "pylib")]
-#[cfg_attr(feature = "pylib", pyproto)]
-impl pyo3::PyObjectProtocol<'_> for SiteInfo {
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(self.description())
     }
 }
 
