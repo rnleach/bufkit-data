@@ -71,7 +71,7 @@ impl Model {
         // Find a good start time that corresponds with an actual model run time.
         let round_start = if *start < *end {
             let mut strt =
-                start.date().and_hms(0, 0, 0) + chrono::Duration::hours(self.base_hour());
+                start.date().and_hms_opt(0, 0, 0).unwrap() + chrono::Duration::hours(self.base_hour());
             // Make sure we didn't jump ahead into the future.
             while strt > *start {
                 strt -= chrono::Duration::hours(self.hours_between_runs());
@@ -84,7 +84,7 @@ impl Model {
             strt
         } else {
             let mut strt =
-                start.date().and_hms(0, 0, 0) + chrono::Duration::hours(self.base_hour());
+                start.date().and_hms_opt(0, 0, 0).unwrap() + chrono::Duration::hours(self.base_hour());
             while strt < *start {
                 strt += chrono::Duration::hours(self.hours_between_runs());
             }
@@ -124,8 +124,8 @@ mod unit {
             "test pre-condition failed."
         );
 
-        let start = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 0, 0);
-        let end = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 0, 0);
+        let start = &NaiveDate::from_ymd_opt(2018, 9, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let end = &NaiveDate::from_ymd_opt(2018, 9, 2).unwrap().and_hms_opt(0, 0, 0).unwrap();
         assert_eq!(Model::GFS.all_runs(start, end).count(), 5);
         Model::GFS
             .all_runs(start, end)
@@ -138,8 +138,8 @@ mod unit {
             .for_each(|rt| assert!(rt >= *start && rt <= *end));
         eprintln!();
 
-        let start = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 1, 0);
-        let end = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 0, 0);
+        let start = &NaiveDate::from_ymd_opt(2018, 9, 1).unwrap().and_hms_opt(0, 1, 0).unwrap();
+        let end = &NaiveDate::from_ymd_opt(2018, 9, 2).unwrap().and_hms_opt(0, 0, 0).unwrap();
         assert_eq!(Model::GFS.all_runs(start, end).count(), 4);
         Model::GFS
             .all_runs(start, end)
@@ -152,8 +152,8 @@ mod unit {
             .for_each(|rt| assert!(rt >= *start && rt <= *end));
         eprintln!();
 
-        let end = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 0, 0);
-        let start = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 0, 0);
+        let end = &NaiveDate::from_ymd_opt(2018, 9, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let start = &NaiveDate::from_ymd_opt(2018, 9, 2).unwrap().and_hms_opt(0, 0, 0).unwrap();
         assert_eq!(Model::GFS.all_runs(start, end).count(), 5);
         Model::GFS
             .all_runs(start, end)
@@ -166,8 +166,8 @@ mod unit {
             .for_each(|rt| assert!(rt >= *end && rt <= *start));
         eprintln!();
 
-        let end = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 1, 0);
-        let start = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 0, 0);
+        let end = &NaiveDate::from_ymd_opt(2018, 9, 1).unwrap().and_hms_opt(0, 1, 0).unwrap();
+        let start = &NaiveDate::from_ymd_opt(2018, 9, 2).unwrap().and_hms_opt(0, 0, 0).unwrap();
         assert_eq!(Model::GFS.all_runs(start, end).count(), 4);
         Model::GFS
             .all_runs(start, end)
@@ -180,8 +180,8 @@ mod unit {
             .for_each(|rt| assert!(rt >= *end && rt <= *start));
         eprintln!();
 
-        let end = &NaiveDate::from_ymd(2018, 9, 1).and_hms(0, 1, 0);
-        let start = &NaiveDate::from_ymd(2018, 9, 2).and_hms(0, 2, 0);
+        let end = &NaiveDate::from_ymd_opt(2018, 9, 1).unwrap().and_hms_opt(0, 1, 0).unwrap();
+        let start = &NaiveDate::from_ymd_opt(2018, 9, 2).unwrap().and_hms_opt(0, 2, 0).unwrap();
         assert_eq!(Model::GFS.all_runs(start, end).count(), 4);
         Model::GFS
             .all_runs(start, end)
