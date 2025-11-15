@@ -39,9 +39,9 @@ impl crate::Archive {
         let time_zone: Option<chrono::FixedOffset> =
             row.get::<_, i32>(4).ok().and_then(|offset: i32| {
                 if offset < 0 {
-                    chrono::FixedOffset::west_opt(offset.abs()).unwrap()
+                    chrono::FixedOffset::west_opt(offset.abs())
                 } else {
-                    chrono::FixedOffset::east_opt(offset).unwrap()
+                    chrono::FixedOffset::east_opt(offset)
                 }
             });
 
