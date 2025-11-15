@@ -282,7 +282,7 @@ mod unit {
             name: Some("Zootown".to_owned()),
             notes: Some("Mountains, not coast.".to_owned()),
             state: Some(crate::StateProv::MT),
-            time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
+            time_zone: Some(chrono::FixedOffset::west_opt(7 * 3600).unwrap()),
         };
 
         arch.update_site(&zootown).expect("Error updating site.");
@@ -311,7 +311,7 @@ mod unit {
         fill_test_archive(&mut arch);
 
         let site = StationNumber::from(727730); // Station number for KMSO
-        let init_time = NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0);
+        let init_time = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(6, 0, 0).unwrap();
         let model = Model::GFS;
 
         assert!(arch
@@ -335,22 +335,22 @@ mod unit {
 
         let station_num = StationNumber::from(727730); // Station number for KMSO
         let init_time_model_pairs = [
-            (NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0), Model::NAM),
-            (NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0), Model::GFS),
+            (NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(), Model::NAM),
+            (NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(6, 0, 0).unwrap(), Model::GFS),
             (
-                NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0),
+                NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(12, 0, 0).unwrap(),
                 Model::GFS,
             ),
             (
-                NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0),
+                NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(12, 0, 0).unwrap(),
                 Model::NAM,
             ),
             (
-                NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0),
+                NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(18, 0, 0).unwrap(),
                 Model::GFS,
             ),
             (
-                NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0),
+                NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(18, 0, 0).unwrap(),
                 Model::NAM,
             ),
         ];

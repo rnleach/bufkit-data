@@ -37,7 +37,7 @@ impl crate::Archive {
             .and_then(|a_string| StateProv::from_str(&a_string).ok());
 
         let time_zone: Option<chrono::FixedOffset> =
-            row.get::<_, i32>(4).ok().map(|offset: i32| {
+            row.get::<_, i32>(4).ok().and_then(|offset: i32| {
                 if offset < 0 {
                     chrono::FixedOffset::west_opt(offset.abs()).unwrap()
                 } else {
@@ -561,7 +561,7 @@ mod unit {
             Some("A coastal city with coffe and rain".to_owned())
         );
         assert_eq!(si.state, Some(StateProv::WA));
-        assert_eq!(si.time_zone, Some(chrono::FixedOffset::west(8 * 3600)));
+        assert_eq!(si.time_zone, Some(chrono::FixedOffset::west_opt(8 * 3600).unwrap()));
 
         let si = arch
             .site(StationNumber::from(3))
@@ -569,7 +569,7 @@ mod unit {
         assert_eq!(si.name, Some("Missoula".to_owned()));
         assert_eq!(si.notes, Some("In a valley.".to_owned()));
         assert_eq!(si.state, None);
-        assert_eq!(si.time_zone, Some(chrono::FixedOffset::west(7 * 3600)));
+        assert_eq!(si.time_zone, Some(chrono::FixedOffset::west_opt(7 * 3600).unwrap()));
 
         assert!(arch.site(StationNumber::from(0)).is_none());
         assert!(arch.site(StationNumber::from(100)).is_none());
@@ -602,13 +602,13 @@ mod unit {
         fill_test_archive(&mut arch);
 
         let kmso = StationNumber::from(727730); // Station number for KMSO
-        let init_time = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
+        let init_time = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(18, 0, 0).unwrap();
         let model = Model::GFS;
 
         let res = arch.retrieve(kmso, model, init_time);
         assert!(res.is_ok());
 
-        let init_time = NaiveDate::from_ymd(2117, 4, 1).and_hms(18, 0, 0);
+        let init_time = NaiveDate::from_ymd_opt(2117, 4, 1).unwrap().and_hms_opt(18, 0, 0).unwrap();
         let res = arch.retrieve(kmso, model, init_time);
         match res {
             Err(BufkitDataErr::NotInIndex) => {}
@@ -627,7 +627,7 @@ mod unit {
         fill_test_archive(&mut arch);
 
         let kmso = StationNumber::from(727730); // Station number for KMSO
-        let init_time = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
+        let init_time = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(18, 0, 0).unwrap();
         let model = Model::GFS;
 
         let res = arch.retrieve_most_recent(kmso, model);
@@ -660,10 +660,10 @@ mod unit {
         let kmso_station_num = StationNumber::from(727730); // Station number for KMSO
         let model = Model::NAM;
 
-        let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
-        let second = NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0);
-        let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
-        let missing = NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0);
+        let first = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let second = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(12, 0, 0).unwrap();
+        let last = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(18, 0, 0).unwrap();
+        let missing = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(6, 0, 0).unwrap();
         assert!(arch.file_exists(kmso_station_num, model, first).unwrap());
         assert!(arch.file_exists(kmso_station_num, model, second).unwrap());
         assert!(arch.file_exists(kmso_station_num, model, last).unwrap());
@@ -771,10 +771,10 @@ mod unit {
         fill_test_archive(&mut arch);
 
         let kmso = StationNumber::from(727730); // Station number for KMSO
-        let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
-        let second = NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0);
-        let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
-        let missing = NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0);
+        let first = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let second = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(12, 0, 0).unwrap();
+        let last = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(18, 0, 0).unwrap();
+        let missing = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(6, 0, 0).unwrap();
 
         let inv = arch.inventory(kmso, Model::NAM).expect("Data base error?");
         assert!(inv.contains(&first));
@@ -793,10 +793,10 @@ mod unit {
         fill_test_archive(&mut arch);
 
         let kmso = StationNumber::from(727730); // Station number for KMSO
-        let first = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
-        let second = NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0);
-        let last = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
-        let missing = NaiveDate::from_ymd(2017, 4, 1).and_hms(6, 0, 0);
+        let first = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let second = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(12, 0, 0).unwrap();
+        let last = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(18, 0, 0).unwrap();
+        let missing = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(6, 0, 0).unwrap();
 
         let missing_times = arch
             .missing_inventory(kmso, Model::NAM, None)
@@ -807,23 +807,23 @@ mod unit {
         assert!(missing_times.contains(&missing));
 
         let larger_range = (
-            NaiveDate::from_ymd(2017, 3, 31).and_hms(0, 0, 0),
-            NaiveDate::from_ymd(2017, 4, 2).and_hms(12, 0, 0),
+            NaiveDate::from_ymd_opt(2017, 3, 31).unwrap().and_hms_opt(0, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2017, 4, 2).unwrap().and_hms_opt(12, 0, 0).unwrap(),
         );
         let missing_times = arch
             .missing_inventory(kmso, Model::NAM, Some(larger_range))
             .expect("Data base error?");
-        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 3, 31).and_hms(0, 0, 0)));
-        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 3, 31).and_hms(6, 0, 0)));
-        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 3, 31).and_hms(12, 0, 0)));
-        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 3, 31).and_hms(18, 0, 0)));
+        assert!(missing_times.contains(&NaiveDate::from_ymd_opt(2017, 3, 31).unwrap().and_hms_opt(0, 0, 0).unwrap()));
+        assert!(missing_times.contains(&NaiveDate::from_ymd_opt(2017, 3, 31).unwrap().and_hms_opt(6, 0, 0).unwrap()));
+        assert!(missing_times.contains(&NaiveDate::from_ymd_opt(2017, 3, 31).unwrap().and_hms_opt(12, 0, 0).unwrap()));
+        assert!(missing_times.contains(&NaiveDate::from_ymd_opt(2017, 3, 31).unwrap().and_hms_opt(18, 0, 0).unwrap()));
         assert!(!missing_times.contains(&first));
         assert!(!missing_times.contains(&second));
         assert!(!missing_times.contains(&last));
         assert!(missing_times.contains(&missing));
-        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 4, 2).and_hms(0, 0, 0)));
-        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 4, 2).and_hms(6, 0, 0)));
-        assert!(missing_times.contains(&NaiveDate::from_ymd(2017, 4, 2).and_hms(12, 0, 0)));
+        assert!(missing_times.contains(&NaiveDate::from_ymd_opt(2017, 4, 2).unwrap().and_hms_opt(0, 0, 0).unwrap()));
+        assert!(missing_times.contains(&NaiveDate::from_ymd_opt(2017, 4, 2).unwrap().and_hms_opt(6, 0, 0).unwrap()));
+        assert!(missing_times.contains(&NaiveDate::from_ymd_opt(2017, 4, 2).unwrap().and_hms_opt(12, 0, 0).unwrap()));
     }
 
     #[test]
@@ -836,8 +836,8 @@ mod unit {
         fill_test_archive(&mut arch);
 
         let kmso = StationNumber::from(727730); // Station number for KMSO
-        let start = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
-        let end = NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0);
+        let start = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let end = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(12, 0, 0).unwrap();
         assert_eq!(
             arch.retrieve_all_valid_in(kmso, Model::GFS, start, end)
                 .unwrap()
@@ -846,7 +846,7 @@ mod unit {
             1
         );
 
-        let end = NaiveDate::from_ymd(2017, 4, 2).and_hms(0, 0, 0);
+        let end = NaiveDate::from_ymd_opt(2017, 4, 2).unwrap().and_hms_opt(0, 0, 0).unwrap();
         assert_eq!(
             arch.retrieve_all_valid_in(kmso, Model::GFS, start, end)
                 .unwrap()
@@ -855,7 +855,7 @@ mod unit {
             3
         );
 
-        let start = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
+        let start = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(18, 0, 0).unwrap();
         assert_eq!(
             arch.retrieve_all_valid_in(kmso, Model::GFS, start, end)
                 .unwrap()
@@ -864,8 +864,8 @@ mod unit {
             3
         );
 
-        let start = NaiveDate::from_ymd(2017, 4, 1).and_hms(0, 0, 0);
-        let end = NaiveDate::from_ymd(2017, 4, 1).and_hms(12, 0, 0);
+        let start = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+        let end = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(12, 0, 0).unwrap();
         assert_eq!(
             arch.retrieve_all_valid_in(kmso, Model::NAM, start, end)
                 .unwrap()
@@ -874,7 +874,7 @@ mod unit {
             1
         );
 
-        let end = NaiveDate::from_ymd(2017, 4, 2).and_hms(0, 0, 0);
+        let end = NaiveDate::from_ymd_opt(2017, 4, 2).unwrap().and_hms_opt(0, 0, 0).unwrap();
         assert_eq!(
             arch.retrieve_all_valid_in(kmso, Model::NAM, start, end)
                 .unwrap()
@@ -883,7 +883,7 @@ mod unit {
             3
         );
 
-        let start = NaiveDate::from_ymd(2017, 4, 1).and_hms(18, 0, 0);
+        let start = NaiveDate::from_ymd_opt(2017, 4, 1).unwrap().and_hms_opt(18, 0, 0).unwrap();
         assert_eq!(
             arch.retrieve_all_valid_in(kmso, Model::NAM, start, end)
                 .unwrap()

@@ -148,7 +148,7 @@ impl crate::Archive {
         let notes: Option<String> = row.get(5)?;
 
         let time_zone: Option<chrono::FixedOffset> =
-            row.get::<_, i32>(6).ok().map(|offset: i32| {
+            row.get::<_, i32>(6).ok().and_then(|offset: i32| {
                 if offset < 0 {
                     chrono::FixedOffset::west_opt(offset.abs()).unwrap()
                 } else {

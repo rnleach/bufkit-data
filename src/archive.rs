@@ -167,14 +167,14 @@ mod unit {
                 name: Some("Seattle".to_owned()),
                 notes: Some("A coastal city with coffe and rain".to_owned()),
                 state: Some(StateProv::WA),
-                time_zone: Some(chrono::FixedOffset::west(8 * 3600)),
+                time_zone: Some(chrono::FixedOffset::west_opt(8 * 3600).unwrap()),
             },
             SiteInfo {
                 station_num: StationNumber::from(3),
                 name: Some("Missoula".to_owned()),
                 notes: Some("In a valley.".to_owned()),
                 state: None,
-                time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
+                time_zone: Some(chrono::FixedOffset::west_opt(7 * 3600).unwrap()),
             },
         ]
     }

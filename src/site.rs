@@ -113,7 +113,7 @@ mod unit {
             name: Some("tv station".to_owned()),
             state: Some(StateProv::VI),
             notes: Some("".to_owned()),
-            time_zone: Some(chrono::FixedOffset::west(7 * 3600)),
+            time_zone: Some(chrono::FixedOffset::west_opt(7 * 3600).unwrap()),
         };
 
         let incomplete_site = SiteInfo {
