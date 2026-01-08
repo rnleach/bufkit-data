@@ -1,6 +1,6 @@
 [package]
 name = "bufkit-data"
-version = "0.24.0"
+version = "0.25.0"
 authors = ["Ryan <rnleach@users.noreply.github.com>"]
 description = "A crate to manage an archive of bufkit files."
 repository = "https://github.com/rnleach/bufkit-data.git"
@@ -8,7 +8,7 @@ readme = "README.md"
 keywords = ["meteorology", "weather", "sounding"]
 categories = ["science"]
 license = "MIT"
-edition="2018"
+edition="2024"
 
 [features]
 default = []
