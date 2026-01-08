@@ -5,6 +5,7 @@ use crate::{
 };
 use chrono::FixedOffset;
 use std::{collections::HashMap, str::FromStr};
+use rusqlite::Statement;
 
 /// A summary of the information about a station.
 #[derive(Debug)]
@@ -23,6 +24,8 @@ pub struct StationSummary {
     pub state: Option<StateProv>,
     /// The time zone offset to local standard time.
     pub time_zone: Option<FixedOffset>,
+    /// Coordinates
+    pub coords: Vec<(f64, f64)>,
     /// The number of files in the archive related to this site.
     pub number_of_files: u32,
 }
@@ -35,6 +38,8 @@ struct StationEntry {
     notes: Option<String>,
     state: Option<StateProv>,
     time_zone: Option<FixedOffset>,
+    lat: f64,
+    lon: f64,
     number_of_files: u32,
 }
 
@@ -52,6 +57,15 @@ impl StationSummary {
             .collect::<Vec<_>>()
             .join(", ")
     }
+
+    /// Concatenate the different coordinates as a string.
+    pub fn coords_as_string(&self) -> String {
+        self.coords
+            .iter()
+            .map(|(lat, lon)| format!("({},{})", lat, lon))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 impl From<StationEntry> for StationSummary {
@@ -64,6 +78,8 @@ impl From<StationEntry> for StationSummary {
             notes,
             state,
             time_zone,
+            lat,
+            lon,
             number_of_files,
         } = entry;
 
@@ -77,6 +93,8 @@ impl From<StationEntry> for StationSummary {
             ids.push(id);
         }
 
+        let coords = vec![(lat, lon),];
+
         StationSummary {
             station_num,
             ids,
@@ -85,6 +103,7 @@ impl From<StationEntry> for StationSummary {
             notes,
             state,
             time_zone,
+            coords,
             number_of_files,
         }
     }
@@ -93,9 +112,44 @@ impl From<StationEntry> for StationSummary {
 impl crate::Archive {
     /// Get a summary of all the stations in the archive.
     pub fn station_summaries(&self) -> Result<Vec<StationSummary>, BufkitDataErr> {
-        let mut vals: HashMap<StationNumber, StationSummary> = HashMap::new();
-
         let mut stmt = self.db_conn.prepare(include_str!("station_summary.sql"))?;
+
+        Self::process_summary_statement(&mut stmt)
+    }
+
+    /// Get a summary of all the stations in the archive near a point..
+    pub fn station_summaries_near(&self, lat: f64, lon: f64) -> Result<Vec<StationSummary>, BufkitDataErr> {
+
+        let max_lat = lat + 0.5;
+        let min_lat = lat - 0.5;
+        let max_lon = lon + 0.5;
+        let min_lon = lon - 0.5;
+
+        let query_str = format!(r#"
+                SELECT 
+                    sites.station_num, 
+                    files.id, 
+                    files.model, 
+                    sites.name, 
+                    sites.state, 
+                    sites.notes, 
+                    sites.tz_offset_sec, 
+                    files.lat,
+                    files.lon,
+                    COUNT(files.station_num)
+                FROM sites LEFT JOIN files ON files.station_num = sites.station_num
+                WHERE files.lat > {} AND files.lat < {} AND files.lon > {} AND files.lon < {}
+                GROUP BY sites.station_num, id, model, lat, lon
+            "#, min_lat, max_lat, min_lon, max_lon);
+
+        let mut stmt = self.db_conn.prepare(&query_str)?;
+
+        Self::process_summary_statement(&mut stmt)
+    }
+
+    fn process_summary_statement(stmt: &mut Statement) -> Result<Vec<StationSummary>, BufkitDataErr> {
+
+        let mut vals: HashMap<StationNumber, StationSummary> = HashMap::new();
 
         stmt.query_and_then([], Self::parse_row_to_entry)?
             .for_each(|stn_entry| {
@@ -156,7 +210,9 @@ impl crate::Archive {
                 }
             });
 
-        let number_of_files: u32 = row.get(7)?;
+        let lat: f64 = row.get(7)?;
+        let lon: f64 = row.get(8)?;
+        let number_of_files: u32 = row.get(9)?;
 
         Ok(StationEntry {
             station_num,
@@ -166,6 +222,8 @@ impl crate::Archive {
             state,
             notes,
             time_zone,
+            lat,
+            lon,
             number_of_files,
         })
     }
