@@ -65,7 +65,7 @@ impl Model {
         self,
         start: &chrono::NaiveDateTime,
         end: &chrono::NaiveDateTime,
-    ) -> impl Iterator<Item = chrono::NaiveDateTime> {
+    ) -> impl Iterator<Item = chrono::NaiveDateTime> + use<> {
         let delta_t = self.hours_between_runs();
 
         // Find a good start time that corresponds with an actual model run time.
