@@ -144,7 +144,39 @@ impl crate::Archive {
 
         let mut stmt = self.db_conn.prepare(&query_str)?;
 
-        Self::process_summary_statement(&mut stmt)
+        let mut summaries = Self::process_summary_statement(&mut stmt)?;
+
+        // Haversine function in kilometers for the selected point
+        let distance = move |coords: &(f64, f64)| -> f64 {
+            let (clat, clon) = coords;
+            
+            let dlat = (lat - clat).to_radians();
+            let dlon = (lon - clon).to_radians();
+
+            let lat = lat.to_radians();
+            let clat = clat.to_radians();
+
+            let a = f64::powi(f64::sin(dlat / 2.0), 2) + f64::powi(f64::sin(dlon / 2.0), 2) * f64::cos(lat) * f64::cos(clat);
+
+            let rad = 6371.0088;
+            let c = 2.0 * f64::asin(f64::sqrt(a));
+            rad * c
+        };
+
+        summaries.sort_unstable_by(|left, right| {
+            let left_min_dist = left.coords.iter()
+                .map(distance)
+                .fold(1_000_000.0, |min, val| { if val < min { val } else { min }});
+
+            let right_min_dist = right.coords.iter()
+                .map(distance)
+                .fold(1_000_000.0, |min, val| { if val < min { val } else { min }});
+
+            left_min_dist.total_cmp(&right_min_dist)
+
+        });
+
+        Ok(summaries)
     }
 
     fn process_summary_statement(stmt: &mut Statement) -> Result<Vec<StationSummary>, BufkitDataErr> {
