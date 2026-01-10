@@ -124,10 +124,10 @@ impl crate::Archive {
     /// Get a summary of all the stations in the archive near a point..
     pub fn station_summaries_near(&self, lat: f64, lon: f64) -> Result<Vec<StationSummary>, BufkitDataErr> {
 
-        let max_lat = lat + 0.5;
-        let min_lat = lat - 0.5;
-        let max_lon = lon + 0.5;
-        let min_lon = lon - 0.5;
+        let max_lat = lat + 2.5;
+        let min_lat = lat - 2.5;
+        let max_lon = lon + 2.5;
+        let min_lon = lon - 2.5;
 
         let query_str = format!(r#"
                 SELECT 
@@ -332,8 +332,8 @@ impl StationSummary {
     }
 
     #[getter]
-    fn get_models(&self) -> Vec<Model> {
-        self.models.clone()
+    fn get_models(&self) -> Vec<String> {
+        self.models.iter().map(|m| String::from(m.as_static_str())).collect()
     }
 
     #[getter]

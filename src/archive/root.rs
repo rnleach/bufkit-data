@@ -38,6 +38,11 @@ impl Archive {
         Ok(Archive { root, db_conn })
     }
 
+    /// Close the connection to the database. Anything after this will fail.
+    pub fn close(self) {
+        let _ = self.db_conn.close();
+    }
+
     /// Retrieve a path to the root. Allows caller to store files in the archive.
     pub fn root(&self) -> &std::path::Path {
         &self.root
