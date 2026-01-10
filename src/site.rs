@@ -1,5 +1,3 @@
-#[cfg(feature = "pylib")]
-use pyo3::prelude::*;
 use std::fmt::Display;
 
 mod station_num;
@@ -7,6 +5,9 @@ pub use station_num::StationNumber;
 
 mod state_prov;
 pub use state_prov::StateProv;
+
+#[cfg(feature = "pylib")]
+use pyo3::prelude::*;
 
 /// Description of a site with a sounding.
 #[cfg_attr(feature = "pylib", pyclass(module = "bufkit_data"))]

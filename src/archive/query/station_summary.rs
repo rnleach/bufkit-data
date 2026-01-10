@@ -7,7 +7,11 @@ use chrono::FixedOffset;
 use std::{collections::HashMap, str::FromStr};
 use rusqlite::Statement;
 
+#[cfg(feature = "pylib")]
+use pyo3::prelude::*;
+
 /// A summary of the information about a station.
+#[cfg_attr(feature = "pylib", pyclass(module = "bufkit_data"))]
 #[derive(Debug)]
 pub struct StationSummary {
     /// Station number
@@ -260,6 +264,84 @@ impl crate::Archive {
         })
     }
 }
+
+#[cfg(feature = "pylib")]
+#[cfg_attr(feature = "pylib", pymethods)]
+impl StationSummary {
+
+    fn __repr__(&self) -> PyResult<String> {
+        let mut buf = String::with_capacity(1024);
+
+        buf.push_str(&format!("Station Num: {}\n", self.station_num));
+
+        if let Some(ref nm) = self.name {
+            buf.push_str("       Name: ");
+            buf.push_str(nm);
+            buf.push('\n');
+        }
+
+        if let Some(ref st) = self.state {
+            buf.push_str("      State: ");
+            buf.push_str(st.as_static_str());
+            buf.push('\n');
+        }
+
+        if let Some(ref note) = self.notes {
+            buf.push_str("      Notes: ");
+            buf.push_str(note);
+            buf.push('\n');
+        }
+
+        buf.push_str("        Ids:");
+        for id in &self.ids {
+            buf.push_str(id);
+            buf.push(',');
+        }
+        buf.push('\n');
+
+        buf.push_str("     Coords:");
+        for (lat, lon) in &self.coords {
+            buf.push_str(&format!("({},{})", lat, lon));
+            buf.push(',');
+        }
+        buf.push('\n');
+
+        buf.push_str(&format!("  Num Files: {}\n", self.number_of_files));
+
+        Ok(buf.to_string())
+    }
+
+    #[getter]
+    fn get_station_num(&self) -> StationNumber {
+        self.station_num
+    }
+
+    #[getter]
+    fn get_station_name(&self) -> String {
+        self.name.clone().unwrap_or_else(|| "No Name".to_owned())
+    }
+
+    #[getter]
+    fn get_coords(&self) -> Vec<(f64, f64)> {
+        self.coords.clone()
+    }
+
+    #[getter]
+    fn get_ids(&self) -> Vec<String> {
+        self.ids.clone()
+    }
+
+    #[getter]
+    fn get_models(&self) -> Vec<Model> {
+        self.models.clone()
+    }
+
+    #[getter]
+    fn get_num_of_files(&self) -> u32 {
+        self.number_of_files
+    }
+}
+
 
 #[cfg(test)]
 mod unit {

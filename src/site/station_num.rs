@@ -50,7 +50,7 @@ impl StationNumber {
 impl StationNumber {
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("bufkit_data::StationNumber({})", self.num))
+        Ok(format!("StationNumber({})", self.num))
     }
 
     #[new]

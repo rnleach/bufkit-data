@@ -61,12 +61,13 @@ mod bufkit_data {
 
     #[pymodule_export]
     use crate::{
-        archive::Archive,
+        archive::{Archive, StationSummary},
         models::Model,
         site::{SiteInfo, StationNumber},
     };
 
     use crate::errors::BufkitDataErr;
+    use super::distance;
 
     use chrono:: NaiveDateTime;
     use pyo3::{ exceptions, prelude::*, IntoPyObjectExt};
@@ -75,6 +76,7 @@ mod bufkit_data {
 
     #[pymethods]
     impl Archive {
+
         #[new]
         fn connect_to(root: String) -> PyResult<Self> {
             Ok(Archive::connect(&root)?)
@@ -152,6 +154,19 @@ mod bufkit_data {
         fn all_sites(&self) -> PyResult<Vec<SiteInfo>> {
             self.sites().map_err(Into::into)
         }
+
+        /// Get a list of stations near a point and their distance from the point in miles.
+        fn get_station_summaries_near(&self, lat: f64, lon: f64) -> PyResult<Vec<(StationSummary, f64)>> {
+            let sums = self.station_summaries_near(lat, lon)?;
+
+            let result: Vec<(StationSummary, f64)> = sums.into_iter().map(|sum| {
+                   let (lat2, lon2) = sum.coords[0];
+                   (sum, distance(lat, lon, lat2, lon2))
+                })
+                .collect();
+            
+            Ok(result)
+        }
     }
 
     #[pyfunction]
@@ -166,6 +181,21 @@ mod bufkit_data {
             exceptions::PyException::new_err(err.to_string())
         }
     }
+}
+
+fn distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64)  -> f64 {
+        
+        let dlat = (lat1 - lat2).to_radians();
+        let dlon = (lon1 - lon2).to_radians();
+
+        let lat1 = lat1.to_radians();
+        let lat2 = lat2.to_radians();
+
+        let a = f64::powi(f64::sin(dlat / 2.0), 2) + f64::powi(f64::sin(dlon / 2.0), 2) * f64::cos(lat1) * f64::cos(lat2);
+
+        let rad = 3958.761;
+        let c = 2.0 * f64::asin(f64::sqrt(a));
+        rad * c
 }
 
 mod archive;
