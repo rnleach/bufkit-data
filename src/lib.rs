@@ -18,7 +18,7 @@
 //! bufkit-data is cloned into and running:
 //!
 //! ```shell
-//! maturin develop --release --strip --cargo-extra-args="--features pylib"
+//! maturin develop --release --strip --features=pylib
 //!
 //! ```
 //!
