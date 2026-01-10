@@ -183,6 +183,7 @@ mod bufkit_data {
     }
 }
 
+#[cfg(feature = "pylib")]
 fn distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64)  -> f64 {
         
         let dlat = (lat1 - lat2).to_radians();
