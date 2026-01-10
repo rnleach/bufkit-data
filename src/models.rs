@@ -1,12 +1,14 @@
 //! Models potentially stored in the archive.
 
+#[cfg(feature = "pylib")]
+use pyo3::prelude::*;
+
 use std::fmt;
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
 /// Models potentially stored in the archive.
-#[derive(
-    Clone, Copy, PartialEq, Eq, Debug, EnumString, IntoStaticStr, EnumIter, Hash, PartialOrd, Ord,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, EnumString, IntoStaticStr, EnumIter, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "pylib", pyclass(module = "bufkit_data"))]
 pub enum Model {
     /// The U.S. Global Forecast System
     #[strum(

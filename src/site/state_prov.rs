@@ -1,6 +1,10 @@
 use strum_macros::{EnumIter, EnumString, IntoStaticStr};
 
+#[cfg(feature = "pylib")]
+use pyo3::prelude::*;
+
 /// State/Providence abreviations for declaring a state in the site.
+#[cfg_attr(feature = "pylib", pyclass(module = "bufkit_data"))]
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, EnumString, IntoStaticStr, EnumIter)]
 #[allow(missing_docs)]
 pub enum StateProv {

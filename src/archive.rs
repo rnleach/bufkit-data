@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use std::convert::TryFrom;
 
 /// The archive.
-#[cfg_attr(feature = "pylib", pyclass(module = "bufkit_data"))]
+#[cfg_attr(feature = "pylib", pyclass(module = "bufkit_data", unsendable))]
 #[derive(Debug)]
 pub struct Archive {
     root: std::path::PathBuf,      // The root directory.

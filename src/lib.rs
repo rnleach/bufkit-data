@@ -47,12 +47,127 @@ pub use crate::errors::BufkitDataErr;
 pub use crate::models::Model;
 pub use crate::site::{SiteInfo, StateProv, StationNumber};
 
-#[cfg(feature = "pylib")]
-mod py_lib;
 
 //
 // Implementation only
 //
+
+#[cfg(feature = "pylib")]
+use pyo3::prelude::*;
+
+#[cfg_attr(feature = "pylib", pymodule)]
+#[cfg(feature = "pylib")]
+mod bufkit_data {
+
+    #[pymodule_export]
+    use crate::{
+        archive::Archive,
+        models::Model,
+        site::{SiteInfo, StationNumber},
+    };
+
+    use crate::errors::BufkitDataErr;
+
+    use chrono:: NaiveDateTime;
+    use pyo3::{ exceptions, prelude::*, IntoPyObjectExt};
+    use std::str::FromStr;
+    use strum::IntoEnumIterator;
+
+    #[pymethods]
+    impl Archive {
+        #[new]
+        fn connect_to(root: String) -> PyResult<Self> {
+            Ok(Archive::connect(&root)?)
+        }
+
+        #[getter]
+        fn get_root(&self) -> PyResult<String> {
+            Ok(self
+                .root()
+                .to_str()
+                .map(String::from)
+                .ok_or(BufkitDataErr::LogicError(
+                    "unable to convert path to string",
+                ))?)
+        }
+
+        fn most_recent(&self, station_num: StationNumber, model: &str) -> PyResult<String> {
+            let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
+            self.retrieve_most_recent(station_num, model)
+                .map_err(Into::into)
+        }
+
+        fn retrieve_sounding(
+            &self,
+            station_num: StationNumber,
+            model: &str,
+            valid_time: NaiveDateTime,
+        ) -> PyResult<String> {
+            let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
+
+            self.retrieve(station_num, model, valid_time)
+                .map_err(Into::into)
+        }
+
+        fn retrieve_all_in(
+            &self,
+            station_num: StationNumber,
+            model: &str,
+            start: NaiveDateTime,
+            end: NaiveDateTime,
+        ) -> PyResult<Vec<String>> {
+            let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
+
+            self.retrieve_all_valid_in(station_num, model, start, end)
+                .map(|iter| iter.collect())
+                .map_err(Into::into)
+        }
+
+        fn id_to_station_num(&self, id: &str, model: &str) -> PyResult<StationNumber> {
+            let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
+            self.station_num_for_id(id, model).map_err(Into::into)
+        }
+
+        fn last_id(&self, py: Python, station_num: StationNumber, model: &str) -> PyResult<Py<PyAny>> {
+            let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
+            match self.most_recent_id(station_num, model)? {
+                Some(val) =>val.into_py_any(py),
+                None => Ok(py.None()),
+            }
+        }
+
+        fn all_ids(&self, station_num: StationNumber, model: &str) -> PyResult<Vec<String>> {
+            let model = Model::from_str(model).map_err(BufkitDataErr::from)?;
+            self.ids(station_num, model).map_err(Into::into)
+        }
+
+        fn info_for_stn_num(&self, py: Python, station_num: StationNumber) -> PyResult<Py<PyAny>> {
+            match self.site(station_num) {
+                Some(site_info) => site_info.into_py_any(py),
+                None => Ok(py.None()),
+            }
+        }
+
+        /// Get a list of all sites in the archive.
+        fn all_sites(&self) -> PyResult<Vec<SiteInfo>> {
+            self.sites().map_err(Into::into)
+        }
+    }
+
+    #[pyfunction]
+    pub fn all_models() -> Vec<String> {
+        Model::iter()
+            .map(|m| m.as_static_str().to_owned())
+            .collect()
+    }
+
+    impl std::convert::From<BufkitDataErr> for PyErr {
+        fn from(err: BufkitDataErr) -> PyErr {
+            exceptions::PyException::new_err(err.to_string())
+        }
+    }
+}
+
 mod archive;
 mod coords;
 mod errors;
