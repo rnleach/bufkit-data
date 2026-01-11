@@ -67,7 +67,6 @@ mod bufkit_data {
     };
 
     use crate::errors::BufkitDataErr;
-    use super::distance;
 
     use chrono:: NaiveDateTime;
     use pyo3::{ exceptions, prelude::*, IntoPyObjectExt};
@@ -181,22 +180,23 @@ mod bufkit_data {
             exceptions::PyException::new_err(err.to_string())
         }
     }
-}
 
-#[cfg(feature = "pylib")]
-fn distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64)  -> f64 {
-        
-        let dlat = (lat1 - lat2).to_radians();
-        let dlon = (lon1 - lon2).to_radians();
+    #[pyfunction]
+    fn distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64)  -> f64 {
+            
+            let dlat = (lat1 - lat2).to_radians();
+            let dlon = (lon1 - lon2).to_radians();
 
-        let lat1 = lat1.to_radians();
-        let lat2 = lat2.to_radians();
+            let lat1 = lat1.to_radians();
+            let lat2 = lat2.to_radians();
 
-        let a = f64::powi(f64::sin(dlat / 2.0), 2) + f64::powi(f64::sin(dlon / 2.0), 2) * f64::cos(lat1) * f64::cos(lat2);
+            let a = f64::powi(f64::sin(dlat / 2.0), 2) + f64::powi(f64::sin(dlon / 2.0), 2) * f64::cos(lat1) * f64::cos(lat2);
 
-        let rad = 3958.761;
-        let c = 2.0 * f64::asin(f64::sqrt(a));
-        rad * c
+            let rad = 3958.761;
+            let c = 2.0 * f64::asin(f64::sqrt(a));
+            rad * c
+    }
+
 }
 
 mod archive;
